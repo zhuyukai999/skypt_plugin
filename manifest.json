@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "数据开放平台信息提取工具",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "从广东省住房和城乡建设厅数据开放平台提取基本信息、施工许可和竣工验收备案数据，并支持CSV导出与数据合并。",
   "permissions": [
     "storage",
@@ -34,6 +34,24 @@
       "js": ["content.js"],
       "run_at": "document_start",
       "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "*://*/*.png", "*://*/*.jpg", "*://*/*.jpeg", "*://*/*.gif", "*://*/*.css", "*://*/*.js",
+        "*://*/*.svg", "*://*/*.ico", "*://*/*.pdf", "*://*/*.mp4", "*://*/*.mp3", "*://*/*.zip",
+        "https://chrome.google.com/*", "https://chromewebstore.google.com/*"
+      ],
+      "js": ["hook.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["hook.js"],
+      "matches": ["<all_urls>"]
     }
   ]
 }

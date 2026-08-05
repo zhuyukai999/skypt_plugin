@@ -206,20 +206,23 @@ function ensureContentScript(tabId, url, callback) {
     chrome.tabs.sendMessage(tabId, { action: 'ping' }, function (resp) {
         if (!chrome.runtime.lastError && resp && resp.pong) {
             console.log('[bg]  ping 成功，content 已就绪' + (resp.initError ? '（但有initError:' + resp.initError + '）' : ''));
-            callback(true);
+            // 即使 content 已就绪，也确保 hook.js 注入到 MAIN world
+            ensureHookInMainWorld(tabId, function() { callback(true); });
             return;
         }
-        console.log('[bg]  ping 无响应，主动注入 content.js');
+        console.log('[bg]  ping 无响应，主动注入 content.js + hook.js');
         try {
             chrome.scripting.executeScript(
                 { target: { tabId: tabId }, files: ['content.js'] },
                 function (results) {
                     if (chrome.runtime.lastError || !results) {
-                        console.error('[bg]  注入失败:', chrome.runtime.lastError ? chrome.runtime.lastError.message : '未知错误');
+                        console.error('[bg]  content.js 注入失败:', chrome.runtime.lastError ? chrome.runtime.lastError.message : '未知错误');
                         callback(false);
                     } else {
-                        console.log('[bg]  注入成功，等待 1200ms 让 content 完全初始化');
-                        setTimeout(function () { callback(true); }, 1200);
+                        console.log('[bg]  content.js 注入成功，注入 hook.js 到 MAIN world');
+                        ensureHookInMainWorld(tabId, function() {
+                            setTimeout(function () { callback(true); }, 800);
+                        });
                     }
                 }
             );
@@ -228,6 +231,33 @@ function ensureContentScript(tabId, url, callback) {
             callback(false);
         }
     });
+}
+
+function ensureHookInMainWorld(tabId, callback) {
+    try {
+        chrome.scripting.executeScript({
+            target: { tabId: tabId, allFrames: false },
+            files: ['hook.js'],
+            world: 'MAIN'
+        }, function(results) {
+            if (chrome.runtime.lastError) {
+                var errMsg = chrome.runtime.lastError.message || '';
+                if (errMsg.indexOf('not allowed') !== -1 || errMsg.indexOf('Cannot access') !== -1) {
+                    console.warn('[bg]  hook.js MAIN world 注入被拒（可能是受限页面），跳过: ' + errMsg);
+                    callback(true);
+                } else {
+                    console.warn('[bg]  hook.js MAIN world 注入失败: ' + errMsg);
+                    callback(false);
+                }
+            } else {
+                console.log('[bg]  hook.js 已注入到 MAIN world');
+                callback(true);
+            }
+        });
+    } catch (e) {
+        console.warn('[bg]  ensureHookInMainWorld 异常:', e);
+        callback(false);
+    }
 }
 
 // ===== 消息监听 =====
