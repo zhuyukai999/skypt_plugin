@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据开放平台信息提取工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { width: 780px; font-family: "Microsoft YaHei", Arial, sans-serif; background: #f5f7fa; color: #333; font-size: 13px; }
+        .header { padding: 12px 20px; background: linear-gradient(135deg, #1890ff, #0050b3); color: #fff; }
+        .header h1 { font-size: 16px; margin-bottom: 4px; }
+        .header .subtitle { font-size: 12px; opacity: 0.9; }
+        .container { padding: 16px 20px; }
+        .tabs { display: flex; border-bottom: 2px solid #e8e8e8; margin-bottom: 16px; }
+        .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; font-weight: 500; transition: all 0.2s; }
+        .tab.active { color: #1890ff; border-bottom-color: #1890ff; }
+        .tab:hover { color: #1890ff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 500; color: #555; }
+        .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .form-item { flex: 1; min-width: 150px; }
+        .form-item label { display: block; margin-bottom: 4px; font-size: 12px; color: #666; }
+        input[type="text"], input[type="number"], input[type="date"], select {
+            width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; outline: none; transition: border 0.2s;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus { border-color: #1890ff; }
+        /* 🔴 组合输入框：input + 右侧小按钮（省级项目编号） */
+        .input-combo { display: flex; gap: 4px; align-items: center; }
+        .input-combo input { flex: 1; min-width: 0; }
+        .input-combo .btn-combo { flex-shrink: 0; padding: 6px 10px; border: 1px solid #1890ff; background: #fff; color: #1890ff; border-radius: 4px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+        .input-combo .btn-combo:hover { background: #1890ff; color: #fff; }
+        input:disabled, select:disabled { background: #f5f5f5; cursor: not-allowed; color: #bfbfbf; }
+        .btn { padding: 7px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .btn-primary { background: #1890ff; color: #fff; }
+        .btn-primary:hover { background: #40a9ff; }
+        .btn-primary:disabled { background: #bfbfbf; cursor: not-allowed; }
+        .btn-default { background: #fff; color: #333; border: 1px solid #d9d9d9; }
+        .btn-default:hover { border-color: #1890ff; color: #1890ff; }
+        .btn-danger { background: #ff4d4f; color: #fff; }
+        .btn-danger:hover { background: #ff7875; }
+        .btn-success { background: #52c41a; color: #fff; }
+        .btn-success:hover { background: #73d13d; }
+        .btn-secondary { background: #faad14; color: #fff; }
+        .btn-secondary:hover { background: #ffc53d; }
+        .button-row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+        .hint { padding: 10px 12px; background: #e6f7ff; border-left: 4px solid #1890ff; margin: 10px 0; font-size: 12px; color: #0050b3; border-radius: 2px; }
+        .status { padding: 10px 12px; background: #fff7e6; border-left: 4px solid #fa8c16; margin: 10px 0; font-size: 12px; color: #ad6800; border-radius: 2px; }
+        .status.success { background: #f6ffed; border-left-color: #52c41a; color: #389e0d; }
+        .status.error { background: #fff2f0; border-left-color: #ff4d4f; color: #cf1322; }
+        .table-wrapper { margin-top: 12px; border: 1px solid #e8e8e8; border-radius: 4px; overflow: auto; max-height: 300px; background: #fff; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead { background: #fafafa; position: sticky; top: 0; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+        th { font-weight: 600; color: #555; }
+        tbody tr:hover { background: #f5f7fa; }
+        .mode-selector { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+        .mode-selector select { padding: 5px 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .progress-bar { height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #1890ff, #52c41a); transition: width 0.3s; width: 0%; }
+        .upload-area { border: 2px dashed #d9d9d9; border-radius: 4px; padding: 16px; text-align: center; cursor: pointer; background: #fafafa; transition: all 0.2s; }
+        .upload-area:hover { border-color: #1890ff; background: #e6f7ff; }
+        .upload-area input { display: none; }
+        .upload-info { margin-top: 8px; font-size: 12px; color: #666; }
+        .stats { display: flex; gap: 20px; margin: 12px 0; padding: 10px 12px; background: #fafafa; border-radius: 4px; }
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-label { font-size: 11px; color: #999; }
+        .stat-value { font-size: 16px; font-weight: 600; color: #1890ff; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f5f5f5; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 数据开放平台信息提取工具</h1>
+        <div class="subtitle">批量提取基本信息、施工许可、竣工验收备案数据</div>
+    </div>
+    <div class="container">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <div class="tabs" style="flex: 1; border-bottom: 2px solid #e8e8e8; display: flex; margin-bottom: 0;">
+                <div class="tab active" data-tab="basic">基本信息</div>
+                <div class="tab" data-tab="permit">施工许可</div>
+                <div class="tab" data-tab="complete">竣工验收备案</div>
+                <div class="tab" data-tab="merge">合并导出</div>
+                <div class="tab" data-tab="upload">去重上传</div>
+            </div>
+            <div style="padding-left: 12px; display: flex; align-items: center; gap: 6px;">
+                <label style="font-size: 12px; color: #666;">显示方式：</label>
+                <select id="displayMode" style="padding: 5px 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                    <option value="popup" selected>弹窗</option>
+                    <option value="window">新窗口</option>
+                    <option value="sidebar">侧边栏</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 基本信息 -->
+        <div class="tab-content active" id="tab-basic">
+            <div class="hint">💡 请先在浏览器中打开「基本信息」页面 (type=1)，填写验证码并点击确认后，再执行筛选。</div>
+            <div class="form-row">
+                <div class="form-item"><label>项目名称</label><input type="text" id="basic-projectName" placeholder="支持模糊查询"></div>
+                <div class="form-item"><label>建设单位</label><input type="text" id="basic-unit" placeholder="支持模糊查询"></div>
+                <!-- 🔴✅ 需求1：省级项目编号：可输入 + 下拉选 + 右侧添加按钮 -->
+                <div class="form-item">
+                    <label>省级项目编号</label>
+                    <div class="input-combo">
+                        <input type="text" id="basic-code" list="basic-code-list" placeholder="支持模糊查询/下拉选择">
+                        <button type="button" class="btn-combo" data-type="basic" data-action="addCode" title="将当前输入值添加到下拉选项">➕ 添加</button>
+                    </div>
+                </div>
+                <div class="form-item"><label>所在城市</label><input type="text" id="basic-city" placeholder="支持模糊查询"></div>
+            </div>
+            <!-- 🔴✅ 需求3：查询范围选择 + 页码（选仅当前页/全部页时禁用页码输入） -->
+            <div class="form-row">
+                <div class="form-item">
+                    <label>查询范围</label>
+                    <select id="basic-pageMode">
+                        <option value="range">指定页码范围</option>
+                        <option value="current">仅当前页</option>
+                        <option value="all">全部页</option>
+                    </select>
+                </div>
+                <div class="form-item"><label>起始页码</label><input type="number" id="basic-startPage" value="1" min="1"></div>
+                <div class="form-item"><label>结束页码</label><input type="number" id="basic-endPage" value="1" min="1"></div>
+            </div>
+            <!-- 🔴✅ 新增：抓取模式选择（兼容老方法 / API 极速新方法 + 自定义每页条数） -->
+            <div class="form-row">
+                <div class="form-item" style="flex:2;">
+                    <label>抓取模式（仅基本信息生效）</label>
+                    <select id="basic-fetchMode" title="极速模式=API直取JSON绕过31页截断；兼容模式=老方法DOM翻页">
+                        <option value="api" selected>🚀 极速模式（API 直取，绕过第31页重复截断）✅推荐</option>
+                        <option value="dom">🔨 兼容模式（老方法 DOM 翻页，第31页后会重复）</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label>每页条数（极速模式）</label>
+                    <input type="number" id="basic-apiPageSize" value="100" min="10" max="500" step="10" title="数值越大页数越少，建议 50~200">
+                </div>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="basic-extract">🔍 开始提取</button>
+                <button class="btn btn-danger" id="basic-stop" style="display:none;">⏹ 停止</button>
+                <button class="btn btn-default" id="basic-preview">📋 预览数据</button>
+                <button class="btn btn-success" id="basic-export">💾 导出CSV（完整）</button>
+                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
+                <button class="btn btn-secondary" id="basic-exportList">💾 仅导出列表CSV</button>
+                <button class="btn btn-danger" id="basic-clear">🗑 清空数据</button>
+            </div>
+            <div class="progress-bar" id="basic-progress" style="display:none;"><div class="progress-bar-fill"></div></div>
+            <div class="status" id="basic-status">等待操作...</div>
+            <div class="table-wrapper" id="basic-table" style="display:none;"></div>
+        </div>
+
+        <!-- 施工许可 -->
+        <div class="tab-content" id="tab-permit">
+            <div class="hint">💡 请先在浏览器中打开「施工许可」页面 (type=5)，填写验证码并点击确认后，再执行筛选。</div>
+            <div class="form-row">
+                <div class="form-item"><label>工程名称</label><input type="text" id="permit-projectName" placeholder="支持模糊查询"></div>
+                <!-- 🔴✅ 需求1：省级项目编号：可输入 + 下拉选 + 右侧添加按钮 -->
+                <div class="form-item">
+                    <label>省级项目编号</label>
+                    <div class="input-combo">
+                        <input type="text" id="permit-code" list="permit-code-list" placeholder="支持模糊查询/下拉选择">
+                        <button type="button" class="btn-combo" data-type="permit" data-action="addCode" title="将当前输入值添加到下拉选项">➕ 添加</button>
+                    </div>
+                </div>
+                <div class="form-item"><label>施工许可证编号</label><input type="text" id="permit-permitNo" placeholder="支持模糊查询"></div>
+                <div class="form-item"><label>发证机关</label><input type="text" id="permit-authority" placeholder="支持模糊查询"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-item"><label>开始日期</label><input type="date" id="permit-startDate"></div>
+                <div class="form-item"><label>结束日期</label><input type="date" id="permit-endDate"></div>
+                <div class="form-item"><label>所在城市</label><input type="text" id="permit-city" placeholder="支持模糊查询"></div>
+            </div>
+            <!-- 🔴✅ 需求3：查询范围选择 + 页码 -->
+            <div class="form-row">
+                <div class="form-item">
+                    <label>查询范围</label>
+                    <select id="permit-pageMode">
+                        <option value="range">指定页码范围</option>
+                        <option value="current">仅当前页</option>
+                        <option value="all">全部页</option>
+                    </select>
+                </div>
+                <div class="form-item"><label>起始页码</label><input type="number" id="permit-startPage" value="1" min="1"></div>
+                <div class="form-item"><label>结束页码</label><input type="number" id="permit-endPage" value="1" min="1"></div>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="permit-extract">🔍 开始提取</button>
+                <button class="btn btn-danger" id="permit-stop" style="display:none;">⏹ 停止</button>
+                <button class="btn btn-default" id="permit-preview">📋 预览数据</button>
+                <button class="btn btn-success" id="permit-export">💾 导出CSV（完整）</button>
+                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
+                <button class="btn btn-secondary" id="permit-exportList">💾 仅导出列表CSV</button>
+                <button class="btn btn-danger" id="permit-clear">🗑 清空数据</button>
+            </div>
+            <div class="progress-bar" id="permit-progress" style="display:none;"><div class="progress-bar-fill"></div></div>
+            <div class="status" id="permit-status">等待操作...</div>
+            <div class="table-wrapper" id="permit-table" style="display:none;"></div>
+        </div>
+
+        <!-- 竣工验收备案 -->
+        <div class="tab-content" id="tab-complete">
+            <div class="hint">💡 请先在浏览器中打开「竣工验收备案」页面 (type=6)，填写验证码并点击确认后，再执行筛选。</div>
+            <div class="form-row">
+                <div class="form-item"><label>工程名称</label><input type="text" id="complete-projectName" placeholder="支持模糊查询"></div>
+                <!-- 🔴✅ 需求1：省级项目编号：可输入 + 下拉选 + 右侧添加按钮 -->
+                <div class="form-item">
+                    <label>省级项目编号</label>
+                    <div class="input-combo">
+                        <input type="text" id="complete-code" list="complete-code-list" placeholder="支持模糊查询/下拉选择">
+                        <button type="button" class="btn-combo" data-type="complete" data-action="addCode" title="将当前输入值添加到下拉选项">➕ 添加</button>
+                    </div>
+                </div>
+                <div class="form-item"><label>竣工验收备案机关</label><input type="text" id="complete-authority" placeholder="支持模糊查询"></div>
+                <div class="form-item"><label>竣工验收备案编号</label><input type="text" id="complete-recordNo" placeholder="支持模糊查询"></div>
+            </div>
+            <!-- 🔴✅ 需求3：查询范围选择 + 页码 -->
+            <div class="form-row">
+                <div class="form-item">
+                    <label>查询范围</label>
+                    <select id="complete-pageMode">
+                        <option value="range">指定页码范围</option>
+                        <option value="current">仅当前页</option>
+                        <option value="all">全部页</option>
+                    </select>
+                </div>
+                <div class="form-item"><label>起始页码</label><input type="number" id="complete-startPage" value="1" min="1"></div>
+                <div class="form-item"><label>结束页码</label><input type="number" id="complete-endPage" value="1" min="1"></div>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="complete-extract">🔍 开始提取</button>
+                <button class="btn btn-danger" id="complete-stop" style="display:none;">⏹ 停止</button>
+                <button class="btn btn-default" id="complete-preview">📋 预览数据</button>
+                <button class="btn btn-success" id="complete-export">💾 导出CSV（完整）</button>
+                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
+                <button class="btn btn-secondary" id="complete-exportList">💾 仅导出列表CSV</button>
+                <button class="btn btn-danger" id="complete-clear">🗑 清空数据</button>
+            </div>
+            <div class="progress-bar" id="complete-progress" style="display:none;"><div class="progress-bar-fill"></div></div>
+            <div class="status" id="complete-status">等待操作...</div>
+            <div class="table-wrapper" id="complete-table" style="display:none;"></div>
+        </div>
+
+        <!-- 合并导出 -->
+        <div class="tab-content" id="tab-merge">
+            <div class="hint">💡 以省级项目编号关联基本信息与其他两表（一对多），以工程名称关联施工许可与竣工验收备案（一对一）。<br>📤 支持「提取数据」与「上传CSV」混合合并，优先同名表内去重；上传主表后将以主表为基准合并并生成变更备注。</div>
+
+            <!-- 🔴✅ 新功能1：三类型 CSV 分别上传 + 每个类型支持单独删除上传 -->
+            <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-item">
+                    <label>上传基本信息CSV</label>
+                    <div class="upload-area" style="padding:12px;" data-upload="basic">
+                        <span style="font-size:12px;">📁 点击选择基本信息CSV文件</span>
+                        <input type="file" accept=".csv" data-file="basic">
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
+                        <div class="upload-info" id="merge-upload-info-basic" style="font-size:11px;">尚未上传</div>
+                        <button class="btn btn-xs btn-danger" data-clear-upload="basic" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
+                    </div>
+                </div>
+                <div class="form-item">
+                    <label>上传施工许可CSV</label>
+                    <div class="upload-area" style="padding:12px;" data-upload="permit">
+                        <span style="font-size:12px;">📁 点击选择施工许可CSV文件</span>
+                        <input type="file" accept=".csv" data-file="permit">
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
+                        <div class="upload-info" id="merge-upload-info-permit" style="font-size:11px;">尚未上传</div>
+                        <button class="btn btn-xs btn-danger" data-clear-upload="permit" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
+                    </div>
+                </div>
+                <div class="form-item">
+                    <label>上传竣工验收备案CSV</label>
+                    <div class="upload-area" style="padding:12px;" data-upload="complete">
+                        <span style="font-size:12px;">📁 点击选择竣工验收备案CSV文件</span>
+                        <input type="file" accept=".csv" data-file="complete">
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
+                        <div class="upload-info" id="merge-upload-info-complete" style="font-size:11px;">尚未上传</div>
+                        <button class="btn btn-xs btn-danger" data-clear-upload="complete" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔴✅ 新功能3：主表上传 / 删除 -->
+            <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-item" style="flex: 1 1 100%;">
+                    <label>📋 上传主表（可选，合并时以主表为基准 + 自动生成变更备注）</label>
+                    <div class="upload-area" style="padding:14px;" data-upload="master">
+                        <span style="font-size:13px;">⭐ 点击选择主表CSV文件（支持任意表，建议使用之前导出的合并表）</span>
+                        <input type="file" accept=".csv" data-file="master">
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                        <div class="upload-info" id="merge-upload-info-master" style="font-size:12px;">尚未上传主表（未上传则按原有逻辑融合）</div>
+                        <button class="btn btn-xs btn-danger" id="merge-clear-master" style="padding:2px 10px; font-size:11px; height:24px; line-height:20px;">🗑 删除主表</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔴✅ 新功能：数据来源分开显示（提取+上传） -->
+            <div class="stats" style="margin:0 0 12px 0; padding:8px 12px;">
+                <div class="stat-item"><div class="stat-label">基本信息(提取/上传)</div><div class="stat-value" id="merge-stats-basic">0 / 0</div></div>
+                <div class="stat-item"><div class="stat-label">施工许可(提取/上传)</div><div class="stat-value" id="merge-stats-permit">0 / 0</div></div>
+                <div class="stat-item"><div class="stat-label">竣工验收(提取/上传)</div><div class="stat-value" id="merge-stats-complete">0 / 0</div></div>
+                <div class="stat-item"><div class="stat-label">主表</div><div class="stat-value" id="merge-stats-master">0</div></div>
+                <div class="stat-item"><div class="stat-label">合并后(条)</div><div class="stat-value" id="merge-stats-merge">0</div></div>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="merge-generate">🔗 生成合并表</button>
+                <button class="btn btn-success" id="merge-export">💾 导出合并CSV</button>
+                <button class="btn btn-warning" id="merge-clear-queried">🧹 清空查询数据</button>
+                <button class="btn btn-default" id="merge-clearUpload">♻️ 清空上传的三表</button>
+                <button class="btn btn-danger" id="merge-clear">🗑 清空全部</button>
+            </div>
+            <div class="status" id="merge-status">请分别提取三类数据，或上传三类CSV文件，然后点击「生成合并表」...</div>
+            <div class="table-wrapper" id="merge-table" style="display:none; max-height: 420px;"></div>
+        </div>
+
+        <!-- 去重上传 -->
+        <div class="tab-content" id="tab-upload">
+            <div class="hint">💡 上传CSV文件后，提取时将自动排除已存在于CSV中的数据。</div>
+            <div class="form-row">
+                <div class="form-item">
+                    <label>选择类型</label>
+                    <select id="upload-type" style="width:100%; padding:6px 10px; border:1px solid #d9d9d9; border-radius:4px;">
+                        <option value="basic">基本信息</option>
+                        <option value="permit">施工许可</option>
+                        <option value="complete">竣工验收备案</option>
+                    </select>
+                </div>
+                <div class="form-item" style="flex: 2;">
+                    <label>上传CSV文件</label>
+                    <div class="upload-area" id="upload-area">
+                        <span>📁 点击此处选择CSV文件</span>
+                        <input type="file" id="upload-file" accept=".csv">
+                    </div>
+                </div>
+            </div>
+            <div class="upload-info" id="upload-info">尚未上传CSV文件</div>
+            <div class="button-row">
+                <button class="btn btn-default" id="upload-clear">🗑 清除上传数据</button>
+            </div>
+        </div>
+    </div>
+    <!-- 🔴✅ 需求1：三个省级项目编号的下拉选项（默认值 441601/441602，可通过➕添加按钮动态新增） -->
+    <datalist id="basic-code-list"></datalist>
+    <datalist id="permit-code-list"></datalist>
+    <datalist id="complete-code-list"></datalist>
+    <script src="popup.js"></script>
+</body>
+</html>

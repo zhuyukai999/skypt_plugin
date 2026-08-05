@@ -1,0 +1,287 @@
+<html lang="zh-cmn-Hans" class=" "><head><meta charset="utf-8"><meta name="renderer" content="webkit"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="ico.png"><style>#loading-mask{position:fixed;left:0;top:0;height:100%;width:100%;background:#fff;user-select:none;z-index:9999;overflow:hidden}.loading-wrapper{position:absolute;top:50%;left:50%;transform:translate(-50%,-100%)}.loading-dot{animation:antRotate 1.2s infinite linear;transform:rotate(45deg);position:relative;display:inline-block;font-size:64px;width:64px;height:64px;box-sizing:border-box}.loading-dot i{width:22px;height:22px;position:absolute;display:block;background-color:#1890ff;border-radius:100%;transform:scale(.75);transform-origin:50% 50%;opacity:.3;animation:antSpinMove 1s infinite linear alternate}.loading-dot i:nth-child(1){top:0;left:0}.loading-dot i:nth-child(2){top:0;right:0;-webkit-animation-delay:.4s;animation-delay:.4s}.loading-dot i:nth-child(3){right:0;bottom:0;-webkit-animation-delay:.8s;animation-delay:.8s}.loading-dot i:nth-child(4){bottom:0;left:0;-webkit-animation-delay:1.2s;animation-delay:1.2s}@keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@-webkit-keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@keyframes antSpinMove{to{opacity:1}}@-webkit-keyframes antSpinMove{to{opacity:1}}</style><script src="config.js"></script><link href="css/app.b47a5bfc.css" rel="preload" as="style"><link href="css/chunk-vendors.44621a64.css" rel="preload" as="style"><link href="js/app.b56f8d8c.js" rel="preload" as="script"><link href="js/chunk-vendors.09caadc1.js" rel="preload" as="script"><link href="css/chunk-vendors.44621a64.css" rel="stylesheet"><link href="css/app.b47a5bfc.css" rel="stylesheet"><title>数据开放平台</title><style type="text/css">
+.vue-cropper[data-v-6dae58fd] {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  direction: ltr;
+  touch-action: none;
+  text-align: left;
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAAA3NCSVQICAjb4U/gAAAABlBMVEXMzMz////TjRV2AAAACXBIWXMAAArrAAAK6wGCiw1aAAAAHHRFWHRTb2Z0d2FyZQBBZG9iZSBGaXJld29ya3MgQ1M26LyyjAAAABFJREFUCJlj+M/AgBVhF/0PAH6/D/HkDxOGAAAAAElFTkSuQmCC");
+}
+.cropper-box[data-v-6dae58fd],
+.cropper-box-canvas[data-v-6dae58fd],
+.cropper-drag-box[data-v-6dae58fd],
+.cropper-crop-box[data-v-6dae58fd],
+.cropper-face[data-v-6dae58fd] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  user-select: none;
+}
+.cropper-box-canvas img[data-v-6dae58fd] {
+  position: relative;
+  text-align: left;
+  user-select: none;
+  transform: none;
+  max-width: none;
+  max-height: none;
+}
+.cropper-box[data-v-6dae58fd] {
+  overflow: hidden;
+}
+.cropper-move[data-v-6dae58fd] {
+  cursor: move;
+}
+.cropper-crop[data-v-6dae58fd] {
+  cursor: crosshair;
+}
+.cropper-modal[data-v-6dae58fd] {
+  background: rgba(0, 0, 0, 0.5);
+}
+.cropper-crop-box[data-v-6dae58fd] {
+  /*border: 2px solid #39f;*/
+}
+.cropper-view-box[data-v-6dae58fd] {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  outline: 1px solid #39f;
+  outline-color: rgba(51, 153, 255, 0.75);
+  user-select: none;
+}
+.cropper-view-box img[data-v-6dae58fd] {
+  user-select: none;
+  text-align: left;
+  max-width: none;
+  max-height: none;
+}
+.cropper-face[data-v-6dae58fd] {
+  top: 0;
+  left: 0;
+  background-color: #fff;
+  opacity: 0.1;
+}
+.crop-info[data-v-6dae58fd] {
+  position: absolute;
+  left: 0px;
+  min-width: 65px;
+  text-align: center;
+  color: white;
+  line-height: 20px;
+  background-color: rgba(0, 0, 0, 0.8);
+  font-size: 12px;
+}
+.crop-line[data-v-6dae58fd] {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.1;
+}
+.line-w[data-v-6dae58fd] {
+  top: -3px;
+  left: 0;
+  height: 5px;
+  cursor: n-resize;
+}
+.line-a[data-v-6dae58fd] {
+  top: 0;
+  left: -3px;
+  width: 5px;
+  cursor: w-resize;
+}
+.line-s[data-v-6dae58fd] {
+  bottom: -3px;
+  left: 0;
+  height: 5px;
+  cursor: s-resize;
+}
+.line-d[data-v-6dae58fd] {
+  top: 0;
+  right: -3px;
+  width: 5px;
+  cursor: e-resize;
+}
+.crop-point[data-v-6dae58fd] {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0.75;
+  background-color: #39f;
+  border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+  top: -4px;
+  left: -4px;
+  cursor: nw-resize;
+}
+.point2[data-v-6dae58fd] {
+  top: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: n-resize;
+}
+.point3[data-v-6dae58fd] {
+  top: -4px;
+  right: -4px;
+  cursor: ne-resize;
+}
+.point4[data-v-6dae58fd] {
+  top: 50%;
+  left: -4px;
+  margin-top: -3px;
+  cursor: w-resize;
+}
+.point5[data-v-6dae58fd] {
+  top: 50%;
+  right: -4px;
+  margin-top: -3px;
+  cursor: e-resize;
+}
+.point6[data-v-6dae58fd] {
+  bottom: -5px;
+  left: -4px;
+  cursor: sw-resize;
+}
+.point7[data-v-6dae58fd] {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: s-resize;
+}
+.point8[data-v-6dae58fd] {
+  bottom: -5px;
+  right: -4px;
+  cursor: se-resize;
+}
+@media screen and (max-width: 500px) {
+.crop-point[data-v-6dae58fd] {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    opacity: 0.45;
+    background-color: #39f;
+    border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+    top: -10px;
+    left: -10px;
+}
+.point2[data-v-6dae58fd],
+  .point4[data-v-6dae58fd],
+  .point5[data-v-6dae58fd],
+  .point7[data-v-6dae58fd] {
+    display: none;
+}
+.point3[data-v-6dae58fd] {
+    top: -10px;
+    right: -10px;
+}
+.point4[data-v-6dae58fd] {
+    top: 0;
+    left: 0;
+}
+.point6[data-v-6dae58fd] {
+    bottom: -10px;
+    left: -10px;
+}
+.point8[data-v-6dae58fd] {
+    bottom: -10px;
+    right: -10px;
+}
+}
+</style><link rel="stylesheet" type="text/css" href="css/Layout.b9bc7063.css"><script charset="utf-8" src="js/Layout.39dcd092.js"></script><script charset="utf-8" src="js/chunk-0e52ad52.20149d44.js"></script><script charset="utf-8" src="js/chunk-92cae89c.f6186be4.js"></script><link rel="stylesheet" type="text/css" href="css/chunk-0f3d7edc.37df5669.css"><script charset="utf-8" src="js/chunk-0f3d7edc.4f37422e.js"></script><link rel="stylesheet" type="text/css" href="css/chunk-11e61320.e57686fd.css"><script charset="utf-8" src="js/chunk-11e61320.7dfe5541.js"></script><link rel="stylesheet" type="text/css" href="css/project.b8152269.css"><script charset="utf-8" src="js/project.eab6996d.js"></script></head><body><noscript><strong>We're sorry but mzw_apps doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"><div class="dop-layout"><div data-v-383e106a="" class="header-wrap"><div data-v-383e106a="" class="header-content"><div data-v-383e106a="" class="top-box"><img data-v-383e106a="" src="img/logo-dop.270b3b13.png" class="logo"></div><ul data-v-383e106a="" class="nav-list"><li data-v-383e106a="" class="">行业大数据</li><li data-v-383e106a="" class="">企业信息</li><li data-v-383e106a="" class="">人员信息</li><li data-v-383e106a="" class="router-link-active active">项目信息</li><li data-v-383e106a="" class="">诚信信息</li></ul></div><!----></div><div data-v-36bb8e3c="" class="page-container"><div data-v-36bb8e3c="" class="main-container"><div data-v-60ab8ed8="" data-v-36bb8e3c="" class="app-module-wrap"><div data-v-60ab8ed8="" class="app-list-wrap"><ul data-v-60ab8ed8="" class="app-list"><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-qiye_xiangmuxinxijiucuo"></span><h2 data-v-60ab8ed8="" class="title">基本信息</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_gongchengzhaotoubiaoxinxi"></span><h2 data-v-60ab8ed8="" class="title">工程招投标</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_gongchenghetongbeianxinxi"></span><h2 data-v-60ab8ed8="" class="title">合同信息</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_shigongtushenchaxinxi"></span><h2 data-v-60ab8ed8="" class="title">施工图审查</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_shigongxukexinxi"></span><h2 data-v-60ab8ed8="" class="title">施工许可</h2></li><li data-v-60ab8ed8="" class="item selected"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_jungongyanshoubeianxinxi"></span><h2 data-v-60ab8ed8="" class="title">竣工验收备案</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_jungongyanshoubeianxinxi"></span><h2 data-v-60ab8ed8="" class="title">竣工验收信息</h2></li><li data-v-60ab8ed8="" class="item"><span data-v-60ab8ed8="" class="icon iconfont icon-xiangmu_jungongyanshoubeianxinxi"></span><h2 data-v-60ab8ed8="" class="title">业绩技术指标</h2></li></ul></div></div><div data-v-2733bfb9="" data-v-36bb8e3c="" class="search-module-wrap"><div data-v-2733bfb9="" class="search-form-wrap"><div data-v-2733bfb9="" class="left"><div data-v-2733bfb9="" class="form-box"><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="工程名称" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="省级项目编号" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="竣工验收备案机关" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="竣工验收备案编号" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item valid-code"><!----><!----><!----><!----><input data-v-2733bfb9="" placeholder="请输入验证码" type="text" class="input ant-input" style="width: 200px;"><img data-v-2733bfb9="" src="data:image/jpeg;base64,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" class="valid-img"></div></div><p data-v-2733bfb9="" class="tips-box"> 数据分级的主要依据为数据产生或审核的行政主管部门层级。A级：省级住房和城乡建设主管部门审核确认；B级：市级住房和城乡建设主管部门审核确认；C级：县级住房和城乡建设主管部门审核确认；D级：建筑市场主体填报，未经行政主管部门审核。 </p></div><div data-v-2733bfb9="" class="right"><button data-v-2733bfb9="" class="serach-btn">搜索</button></div></div></div><div data-v-36bb8e3c="" class="list-module-wrap"><div data-v-36bb8e3c="" class="list-box"><div data-v-36bb8e3c="" class="ant-table-wrapper"><div class="ant-spin-nested-loading"><div class="ant-spin-container"><div class="ant-table ant-table-scroll-position-left ant-table-layout-fixed ant-table-default"><div class="ant-table-content"><!----><div class="ant-table-body"><table class=""><colgroup><col style="width: 320px; min-width: 320px;"><col style="width: 220px; min-width: 220px;"><col style="width: 220px; min-width: 220px;"><col style="width: 260px; min-width: 260px;"><col style="width: 120px; min-width: 120px;"></colgroup><thead class="ant-table-thead"><tr><th key="projectName" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word"><span class="ant-table-header-column"><div><span class="ant-table-column-title">工程名称</span><span class="ant-table-column-sorter"></span></div></span></th><th key="provinceArchiveCode" class="ant-table-row-cell-break-word"><span class="ant-table-header-column"><div><span class="ant-table-column-title">竣工验收备案编号</span><span class="ant-table-column-sorter"></span></div></span></th><th key="projectCode" class="ant-table-row-cell-break-word"><span class="ant-table-header-column"><div><span class="ant-table-column-title">省级项目编号</span><span class="ant-table-column-sorter"></span></div></span></th><th key="archiveOrgName" class="ant-table-row-cell-break-word"><span class="ant-table-header-column"><div><span class="ant-table-column-title">竣工验收备案机关</span><span class="ant-table-column-sorter"></span></div></span></th><th key="dataLevel" class="ant-table-row-cell-break-word ant-table-row-cell-last"><span class="ant-table-header-column"><div><span class="ant-table-column-title">数据等级</span><span class="ant-table-column-sorter"></span></div></span></th></tr></thead><tbody class="ant-table-tbody"><tr class="ant-table-row ant-table-row-level-0" data-row-key="0"><td title="显利铝船车间项目" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">显利铝船车间项目</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4404032509100001-JX-001</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4404032509100001</span></td><td class="ant-table-row-cell-break-word">珠海市斗门区住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="1"><td title="台山市福安西路（K1+567.5~K1+841.889）" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">台山市福安西路（K1+567.5~K1+841.889）</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001-JX-003</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001</span></td><td class="ant-table-row-cell-break-word">台山市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="2"><td title="台山市台城北新区仓下路建设工程（乐华路至东坑路段）" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">台山市台城北新区仓下路建设工程（乐华路至东坑路段）</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001-JX-002</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001</span></td><td class="ant-table-row-cell-break-word">台山市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="3"><td title="台山市站前大道西段建设工程（主车道部分工程）" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">台山市站前大道西段建设工程（主车道部分工程）</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001-JX-001</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407812209280001</span></td><td class="ant-table-row-cell-break-word">台山市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="4"><td title="新长亿汽车配件厂房建设项目2#厂房" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">新长亿汽车配件厂房建设项目2#厂房</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4413232507310001-JX-001</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4413232507310001</span></td><td class="ant-table-row-cell-break-word">惠东县住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="5"><td title="金多利·九龙湾花园8号楼、9号楼（25～30层复式层改平层改造工程）" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">金多利·九龙湾花园8号楼、9号楼（25～30层复式层改平层改造工程）</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4418021707070101-JX-002</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4418021707070101</span></td><td class="ant-table-row-cell-break-word">清远市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">B</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="6"><td title="维港星汇花园4#5#楼" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">维港星汇花园4#5#楼</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4418022311140001-JX-007</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4418022311140001</span></td><td class="ant-table-row-cell-break-word">清远市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">B</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="7"><td title="中山市古镇镇曹三村股份合作经济联合社（一期）“工改工”宗地项目 E地块厂房" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">中山市古镇镇曹三村股份合作经济联合社（一期）“工改工”宗地项目 E地块厂房</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4420002411220006-JX-010</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4420002411220006</span></td><td class="ant-table-row-cell-break-word">中山市古镇镇城市建设和管理局</td><td class="ant-table-row-cell-break-word">B</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="8"><td title="厂房-2号仓储" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">厂房-2号仓储</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4404042012230101-JX-002</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4404042012230101</span></td><td class="ant-table-row-cell-break-word">珠海市金湾区住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr><tr class="ant-table-row ant-table-row-level-0" data-row-key="9"><td title="鹤山（古劳）万洋众创城三期项目E2栋厂房" class="ant-table-row-cell-ellipsis ant-table-row-cell-break-word">鹤山（古劳）万洋众创城三期项目E2栋厂房</td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407842504240001-JX-004</span></td><td class="ant-table-row-cell-break-word"><span data-v-36bb8e3c="" class="clickText">4407842504240001</span></td><td class="ant-table-row-cell-break-word">鹤山市住房和城乡建设局</td><td class="ant-table-row-cell-break-word">C</td></tr></tbody></table></div></div></div></div></div></div><div data-v-36bb8e3c="" class="pagination-wrap"><div data-v-00261a6c="" data-v-36bb8e3c="" class="pagination-box" current="1" pagesize="10"><p data-v-00261a6c="" class="info">总共：88899 条记录</p><ul data-v-00261a6c="" unselectable="unselectable" class="ant-pagination"><li title="上一页" aria-disabled="true" class="ant-pagination-disabled ant-pagination-prev"><a class="ant-pagination-item-link"><i aria-label="图标: left" class="anticon anticon-left"><svg viewBox="64 64 896 896" data-icon="left" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 0 0 0 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"></path></svg></i></a></li><li title="1" tabindex="0" class="ant-pagination-item ant-pagination-item-1 ant-pagination-item-active"><a>1</a></li><li title="2" tabindex="0" class="ant-pagination-item ant-pagination-item-2"><a>2</a></li><li title="3" tabindex="0" class="ant-pagination-item ant-pagination-item-3"><a>3</a></li><li title="4" tabindex="0" class="ant-pagination-item ant-pagination-item-4"><a>4</a></li><li title="5" tabindex="0" class="ant-pagination-item ant-pagination-item-5 ant-pagination-item-before-jump-next"><a>5</a></li><li title="向后 5 页" tabindex="0" class="ant-pagination-jump-next ant-pagination-jump-next-custom-icon"><a class="ant-pagination-item-link"><div class="ant-pagination-item-container"><i aria-label="图标: double-right" class="anticon anticon-double-right ant-pagination-item-link-icon"><svg viewBox="64 64 896 896" data-icon="double-right" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M533.2 492.3L277.9 166.1c-3-3.9-7.7-6.1-12.6-6.1H188c-6.7 0-10.4 7.7-6.3 12.9L447.1 512 181.7 851.1A7.98 7.98 0 0 0 188 864h77.3c4.9 0 9.6-2.3 12.6-6.1l255.3-326.1c9.1-11.7 9.1-27.9 0-39.5zm304 0L581.9 166.1c-3-3.9-7.7-6.1-12.6-6.1H492c-6.7 0-10.4 7.7-6.3 12.9L751.1 512 485.7 851.1A7.98 7.98 0 0 0 492 864h77.3c4.9 0 9.6-2.3 12.6-6.1l255.3-326.1c9.1-11.7 9.1-27.9 0-39.5z"></path></svg></i><span class="ant-pagination-item-ellipsis">•••</span></div></a></li><li title="8890" tabindex="0" class="ant-pagination-item ant-pagination-item-8890"><a>8890</a></li><li title="下一页" tabindex="0" class=" ant-pagination-next"><a class="ant-pagination-item-link"><i aria-label="图标: right" class="anticon anticon-right"><svg viewBox="64 64 896 896" data-icon="right" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z"></path></svg></i></a></li><li class="ant-pagination-options"><div tabindex="0" class="ant-select ant-select-enabled ant-pagination-options-size-changer"><div role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-controls="0d8868ae-e924-4eb2-fa6c-0f0aa53f98df" class="ant-select-selection ant-select-selection--single"><div class="ant-select-selection__rendered"><div title="10 条/页" class="ant-select-selection-selected-value" style="display: block; opacity: 1;">10 条/页</div></div><span unselectable="on" class="ant-select-arrow" style="user-select: none;"><i aria-label="图标: down" class="anticon anticon-down ant-select-arrow-icon"><svg viewBox="64 64 896 896" data-icon="down" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"></path></svg></i></span></div></div></li></ul></div></div></div></div></div><!----></div><footer data-v-039f9258="" class="footer-wrap"><div data-v-039f9258="" class="footer-content"><div data-v-039f9258="" class="left"><p data-v-039f9258="" class="title">相关链接</p><ul data-v-039f9258="" class="links"><li data-v-039f9258=""><a data-v-039f9258="" href="http://zfcxjst.gd.gov.cn/" target="_blank">广东省住房和城乡建设厅</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="https://sk.gdcic.net/Approve" target="_blank">三库一平台管理信息服务系统</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="http://210.76.85.73/" target="_blank">进粤企业和人员诚信信息登记平台</a></li></ul></div></div></footer><!----></div></div><script src="npm/vue@2.6.10/dist/vue.min.js"></script><script src="npm/axios@0.19.0/dist/axios.min.js"></script><script src="npm/vue-router@3.1.2/dist/vue-router.min.js"></script><script src="npm/vuex@3.1.1/dist/vuex.min.js"></script><script src="npm/moment@2.24.0/moment.min.js"></script><script src="npm/moment@2.24.0/locale/zh-cn.js"></script><script src="npm/@antv/g2@3.5.7/dist/g2.min.js"></script><script src="npm/@antv/data-set@0.10.2/dist/data-set.min.js"></script><script>function isWeiXin() {
+          var ua = window.navigator.userAgent.toLowerCase();
+          //console.log(ua);//mozilla/5.0 (iphone; cpu iphone os 9_1 like mac os x) applewebkit/601.1.46 (khtml, like gecko)version/9.0 mobile/13b143 safari/601.1
+          if (ua.match(/MicroMessenger/i) == 'micromessenger') {
+              return true;
+          }
+          else {
+              return false;
+          }
+      }
+      if(isWeiXin()){
+          window.location='weixin.html'
+          console.log(" 是来自微信内置浏览器");
+      }
+      window.config = window.config || {}
+      document.title = window.config.title</script><script src="js/chunk-vendors.09caadc1.js"></script><script src="js/app.b56f8d8c.js"></script><!----><div id="epmt" style="top: 100px; left: 0px; height: 500px; width: 300px; position: fixed; z-index: 999999999; border: 2px solid rgb(32, 85, 138); background: white; display: none; box-sizing: border-box; cursor: inherit;"><div style="position: absolute; top: 0px; width: 100%; height: 40px; background: rgb(32, 85, 138);"><div style="padding-left: 7px; width: calc(100% - 50px);">
+<svg viewBox="0 0 128 128" style="height: 40px; width: 40px;">
+    <rect x="0" y="0" width="128" height="128" fill="#20558a" stroke="none" stroke-width="1" fill-opacity="1"></rect>
+<g id="obj_3" transform="matrix(1,0,0,1,0,31.259999999999998)" opacity="1" display="inline"><path d="M 50.933 0 L 50.933 12.783 L 0 12.783 L 0 0 L 50.933 0 Z M 49.592 26.845 L 49.592 38.348 L 0 38.348 L 0 26.845 L 49.592 26.845 Z M 50.933 65.195 L 0 65.195 L 0 52.413 L 50.933 52.413 L 50.933 65.195 Z M 102.534 35.787 C 109.038 35.619 114.262 30.532 114.262 24.288 C 114.262 18.045 109.038 12.956 102.534 12.787 L 102.534 12.783 L 67.686 12.783 L 67.686 0 L 102.534 0 C 116.592 0 128 10.88 128 24.287 C 128 37.693 116.592 48.576 102.534 48.576 L 81.089 48.576 L 81.089 65.48 L 67.686 65.48 L 67.686 48.576 L 67.686 36.718 L 67.686 35.793 L 102.534 35.793 L 102.534 35.787 Z " fill-opacity="1" fill="#ffffff" stroke="none" stroke-width="1" stroke-linecap="square" stroke-linejoin="miter"></path><defs></defs></g>
+
+</svg></div><span style="height: 42px; width: 42px; position: absolute; right: -2px; top: -2px; cursor: pointer;"><div style="background: white; height: 4px; width: 20px; left: 50%; top: 50%; transform: translate(-50%, -50%); position: relative;"></div></span></div><div style="position: absolute; height: 10px; width: 0px; left: 0px; top: -10px;"></div><div style="position: absolute; height: 10px; width: 0px; left: 0px; top: 0px;"></div><div style="position: absolute; width: 10px; height: 0px; left: -10px; top: 0px;"></div><div style="position: absolute; width: 10px; height: 0px; left: 0px; top: 0px;"></div><div style="position: absolute; width: 10px; height: 10px; left: -10px; top: -10px;"></div><div style="position: absolute; width: 10px; height: 10px; right: -10px; top: -10px;"></div><div style="position: absolute; width: 10px; height: 10px; right: -10px; bottom: -10px;"></div><div style="position: absolute; width: 10px; height: 10px; left: -10px; bottom: -10px;"></div><div id="epmt-content">
+            <div id="epmt-menu-bar">
+                <div id="epmt-option-button-dictionary" view="epmt-dictionary-view" class="epmt-option-button" style="color: white; background-color: rgb(32, 85, 138);">Dictionary</div>
+                <div id="epmt-option-button-translate" view="epmt-translate-view" class="epmt-option-button" style="color: black; background-color: white;">Translate</div>
+                <div id="epmt-option-button-settings" view="epmt-settings-view" class="epmt-option-button" style="color: black; background-color: white;">Settings</div>
+            </div>
+            <div id="epmt-view-container">
+                <div id="epmt-dictionary-view" class="epmt-view" style="display: inherit;">
+                    <div id="epmt-dictionary-search-bar">
+                        <input id="epmt-dictionary-search-input" autocomplete="off" spellcheck="false" placeholder="Bing 英汉词典" class="epmt-focus">
+                        <div id="epmt-dictionary-search-button" class="epmt-button">Search </div>
+                    </div>
+                    <div id="epmt-dictionary-search-result-container">
+                    <div class="epmt-dictionary-loading-container">
+                            <div class="epmt-dictionary-loading-title">Feedback(反馈)</div>
+                            <a target="_blank" href="https://github.com/naivenaive/EasyPubMed/blob/master/EasyPubMed%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E.md#%E9%94%99%E8%AF%AF%E6%8A%A5%E5%91%8A%E5%8F%8A%E5%BB%BA%E8%AE%AE">
+                                <img class="epmt-dictionary-loading-img" src="chrome-extension://nkpdpmomjhifdobiopmgfjjffacldfje/images/feedback.png">
+                            </a>
+                            <div class="epmt-dictionary-loading-description">Leave your suggestions to help us improve EasyPubMedicine. Please feel free to contact us.</div>
+                            <div class="epmt-dictionary-loading-description">如果您使用EasyPubMedicine期间出现任何问题或有任何建议，欢迎向我们反馈。您的建议将非常有助于EasyPubMedicine的改进。</div>
+                        </div>
+                        <div class="epmt-dictionary-loading-container">
+                            <div class="epmt-dictionary-loading-title">Donation(捐赠)</div>
+                            <a target="_blank" href="https://github.com/naivenaive/EasyPubMed/blob/master/EasyPubMed%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E.md#%E6%8D%90%E8%B5%A0">
+                                <img class="epmt-dictionary-loading-img" src="chrome-extension://nkpdpmomjhifdobiopmgfjjffacldfje/images/donation.png">
+                            </a>
+                            <div class="epmt-dictionary-loading-description">EasyPubMedicine is completely free. If you find it useful, will you consider supporting us a cup of coffee($5)?</div>
+                            <div class="epmt-dictionary-loading-description">EasyPubMedicine是完全免费的。如果您觉得此扩展有用、好用，能否请作者吃一份烤冷面（10元），喝一杯咖啡（20元）呢？</div>
+                        </div>
+                        <div class="epmt-dictionary-loading-container">
+                            <div class="epmt-dictionary-loading-title">Author(作者)</div>
+                            <a target="_blank" href="https://github.com/naivenaive/EasyPubMed/blob/master/EasyPubMed%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E.md#%E4%BD%9C%E8%80%85">
+                                <img class="epmt-dictionary-loading-img" src="chrome-extension://nkpdpmomjhifdobiopmgfjjffacldfje/images/author.png">
+                            </a>
+                            <div class="epmt-dictionary-loading-description">                            Tian Zhen: A medical student majored in dermatology with great interest in programming.</div>
+                            <div class="epmt-dictionary-loading-description">田振：一名对编程感兴趣的皮肤科医学生。欢迎同我交朋友。</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="epmt-translate-view" class="epmt-view" style="display: none;">
+                    <div class="epmt-translate-param-row-wrapper">
+                        <div class="epmt-translate-param-label">Service</div>
+                        <div id="epmt-translate-param-service-display" class="epmt-translate-param-value" display="Auto(自动)" value="auto">Auto(自动)</div>
+                        <div id="epmt-translate-param-service-option-container" class="epmt-translate-param-option-container" style="display: none;">
+                        <div display="Auto(自动)" value="auto" class="epmt-translate-param-option">Auto(自动)</div><div display="Google(谷歌)" value="google" class="epmt-translate-param-option">Google(谷歌)</div><div display="Baidu(百度)" value="baidu" class="epmt-translate-param-option">Baidu(百度)</div><div display="Colorful-clouds(彩云小译)" value="colorful-clouds" class="epmt-translate-param-option">Colorful-clouds(彩云小译)</div><div display="DeepL" value="deepl" class="epmt-translate-param-option">DeepL</div><div display="棵岩翻译" value="keyan" class="epmt-translate-param-option">棵岩翻译</div><div display="小牛翻译" value="xiaoniu" class="epmt-translate-param-option">小牛翻译</div></div>
+                    </div>
+                    <div class="epmt-translate-param-row-wrapper">
+                        <div class="epmt-translate-param-label">Target</div>
+                        <div id="epmt-translate-param-target-display" class="epmt-translate-param-value" display="Chinese Simplified(中文简体)" value="zh-cn">Chinese Simplified(中文简体)</div>
+                        <div id="epmt-translate-param-target-option-container" class="epmt-translate-param-option-container" style="display: none;"><div display="Chinese Simplified(中文简体)" value="zh-cn" class="epmt-translate-param-option">Chinese Simplified(中文简体)</div><div display="Chinese Traditional(中文繁體)" value="zh-tw" class="epmt-translate-param-option">Chinese Traditional(中文繁體)</div><div display="English" value="en" class="epmt-translate-param-option">English</div><div display="Afrikaans" value="af" class="epmt-translate-param-option">Afrikaans</div><div display="Albanian" value="sq" class="epmt-translate-param-option">Albanian</div><div display="Amharic" value="am" class="epmt-translate-param-option">Amharic</div><div display="Arabic" value="ar" class="epmt-translate-param-option">Arabic</div><div display="Armenian" value="hy" class="epmt-translate-param-option">Armenian</div><div display="Azerbaijani" value="az" class="epmt-translate-param-option">Azerbaijani</div><div display="Basque" value="eu" class="epmt-translate-param-option">Basque</div><div display="Belarusian" value="be" class="epmt-translate-param-option">Belarusian</div><div display="Bengali" value="bn" class="epmt-translate-param-option">Bengali</div><div display="Bosnian" value="bs" class="epmt-translate-param-option">Bosnian</div><div display="Bulgarian" value="bg" class="epmt-translate-param-option">Bulgarian</div><div display="Catalan" value="ca" class="epmt-translate-param-option">Catalan</div><div display="Cebuano" value="ce" class="epmt-translate-param-option">Cebuano</div><div display="Chichewa" value="ny" class="epmt-translate-param-option">Chichewa</div><div display="Corsican" value="co" class="epmt-translate-param-option">Corsican</div><div display="Croatian" value="hr" class="epmt-translate-param-option">Croatian</div><div display="Czech" value="cs" class="epmt-translate-param-option">Czech</div><div display="Danish" value="da" class="epmt-translate-param-option">Danish</div><div display="Dutch" value="nl" class="epmt-translate-param-option">Dutch</div><div display="Esperanto" value="eo" class="epmt-translate-param-option">Esperanto</div><div display="Estonian" value="et" class="epmt-translate-param-option">Estonian</div><div display="Filipino" value="tl" class="epmt-translate-param-option">Filipino</div><div display="Finnish" value="fi" class="epmt-translate-param-option">Finnish</div><div display="French" value="fr" class="epmt-translate-param-option">French</div><div display="Frisian" value="fy" class="epmt-translate-param-option">Frisian</div><div display="Galician" value="gl" class="epmt-translate-param-option">Galician</div><div display="Georgian" value="ka" class="epmt-translate-param-option">Georgian</div><div display="German" value="de" class="epmt-translate-param-option">German</div><div display="Greek" value="el" class="epmt-translate-param-option">Greek</div><div display="Gujarati" value="gu" class="epmt-translate-param-option">Gujarati</div><div display="Haitian Creole" value="ht" class="epmt-translate-param-option">Haitian Creole</div><div display="Hausa" value="ha" class="epmt-translate-param-option">Hausa</div><div display="Hawaiian" value="ha" class="epmt-translate-param-option">Hawaiian</div><div display="Hebrew" value="he" class="epmt-translate-param-option">Hebrew</div><div display="Hebrew" value="iw" class="epmt-translate-param-option">Hebrew</div><div display="Hindi" value="hi" class="epmt-translate-param-option">Hindi</div><div display="Hmong" value="hm" class="epmt-translate-param-option">Hmong</div><div display="Hungarian" value="hu" class="epmt-translate-param-option">Hungarian</div><div display="Icelandic" value="is" class="epmt-translate-param-option">Icelandic</div><div display="Igbo" value="ig" class="epmt-translate-param-option">Igbo</div><div display="Indonesian" value="id" class="epmt-translate-param-option">Indonesian</div><div display="Irish" value="ga" class="epmt-translate-param-option">Irish</div><div display="Italian" value="it" class="epmt-translate-param-option">Italian</div><div display="Japanese" value="ja" class="epmt-translate-param-option">Japanese</div><div display="Javanese" value="jw" class="epmt-translate-param-option">Javanese</div><div display="Kannada" value="kn" class="epmt-translate-param-option">Kannada</div><div display="Kazakh" value="kk" class="epmt-translate-param-option">Kazakh</div><div display="Khmer" value="km" class="epmt-translate-param-option">Khmer</div><div display="Korean" value="ko" class="epmt-translate-param-option">Korean</div><div display="Kurdish (Kurmanji)" value="ku" class="epmt-translate-param-option">Kurdish (Kurmanji)</div><div display="Kyrgyz" value="ky" class="epmt-translate-param-option">Kyrgyz</div><div display="Lao" value="lo" class="epmt-translate-param-option">Lao</div><div display="Latin" value="la" class="epmt-translate-param-option">Latin</div><div display="Latvian" value="lv" class="epmt-translate-param-option">Latvian</div><div display="Lithuanian" value="lt" class="epmt-translate-param-option">Lithuanian</div><div display="Luxembourgish" value="lb" class="epmt-translate-param-option">Luxembourgish</div><div display="Macedonian" value="mk" class="epmt-translate-param-option">Macedonian</div><div display="Malagasy" value="mg" class="epmt-translate-param-option">Malagasy</div><div display="Malay" value="ms" class="epmt-translate-param-option">Malay</div><div display="Malayalam" value="ml" class="epmt-translate-param-option">Malayalam</div><div display="Maltese" value="mt" class="epmt-translate-param-option">Maltese</div><div display="Maori" value="mi" class="epmt-translate-param-option">Maori</div><div display="Marathi" value="mr" class="epmt-translate-param-option">Marathi</div><div display="Mongolian" value="mn" class="epmt-translate-param-option">Mongolian</div><div display="Myanmar (Burmese)" value="my" class="epmt-translate-param-option">Myanmar (Burmese)</div><div display="Nepali" value="ne" class="epmt-translate-param-option">Nepali</div><div display="Norwegian" value="no" class="epmt-translate-param-option">Norwegian</div><div display="Pashto" value="ps" class="epmt-translate-param-option">Pashto</div><div display="Persian" value="fa" class="epmt-translate-param-option">Persian</div><div display="Polish" value="pl" class="epmt-translate-param-option">Polish</div><div display="Portuguese" value="pt" class="epmt-translate-param-option">Portuguese</div><div display="Punjabi" value="pa" class="epmt-translate-param-option">Punjabi</div><div display="Romanian" value="ro" class="epmt-translate-param-option">Romanian</div><div display="Russian" value="ru" class="epmt-translate-param-option">Russian</div><div display="Samoan" value="sm" class="epmt-translate-param-option">Samoan</div><div display="Scots Gaelic" value="gd" class="epmt-translate-param-option">Scots Gaelic</div><div display="Serbian" value="sr" class="epmt-translate-param-option">Serbian</div><div display="Sesotho" value="st" class="epmt-translate-param-option">Sesotho</div><div display="Shona" value="sn" class="epmt-translate-param-option">Shona</div><div display="Sindhi" value="sd" class="epmt-translate-param-option">Sindhi</div><div display="Sinhala" value="si" class="epmt-translate-param-option">Sinhala</div><div display="Slovak" value="sk" class="epmt-translate-param-option">Slovak</div><div display="Slovenian" value="sl" class="epmt-translate-param-option">Slovenian</div><div display="Somali" value="so" class="epmt-translate-param-option">Somali</div><div display="Spanish" value="es" class="epmt-translate-param-option">Spanish</div><div display="Sundanese" value="su" class="epmt-translate-param-option">Sundanese</div><div display="Swahili" value="sw" class="epmt-translate-param-option">Swahili</div><div display="Swedish" value="sv" class="epmt-translate-param-option">Swedish</div><div display="Tajik" value="tg" class="epmt-translate-param-option">Tajik</div><div display="Tamil" value="ta" class="epmt-translate-param-option">Tamil</div><div display="Telugu" value="te" class="epmt-translate-param-option">Telugu</div><div display="Thai" value="th" class="epmt-translate-param-option">Thai</div><div display="Turkish" value="tr" class="epmt-translate-param-option">Turkish</div><div display="Ukrainian" value="uk" class="epmt-translate-param-option">Ukrainian</div><div display="Urdu" value="ur" class="epmt-translate-param-option">Urdu</div><div display="Uzbek" value="uz" class="epmt-translate-param-option">Uzbek</div><div display="Vietnamese" value="vi" class="epmt-translate-param-option">Vietnamese</div><div display="Welsh" value="cy" class="epmt-translate-param-option">Welsh</div><div display="Xhosa" value="xh" class="epmt-translate-param-option">Xhosa</div><div display="Yiddish" value="yi" class="epmt-translate-param-option">Yiddish</div><div display="Yoruba" value="yo" class="epmt-translate-param-option">Yoruba</div><div display="Zulu" value="zu" class="epmt-translate-param-option">Zulu</div></div>
+                    </div>
+                    <textarea placeholder="Source text" spellcheck="false" id="epmt-translate-source"></textarea>
+                    <div id="epmt-translate-translate-button" class="epmt-button">Translate</div>
+                    <textarea placeholder="Translation text" spellcheck="false" id="epmt-translate-target"></textarea>
+                    <div class="epmt-translate-row-wrapper-space-between">
+                        <a target="_blank" id="epmt-translate-power-by">Powered by:</a>
+                        <div id="epmt-translate-target-copy" class="epmt-button">Copy</div>
+                    </div>
+                </div>
+                <div id="epmt-settings-view" class="epmt-view" style="display: none;">
+                    <div class="epmt-settings-setting-container">
+                        <div class="epmt-settings-label">Translation Service Order</div>
+                        <div id="epmt-settings-drag-element-container">
+                        <div class="epmt-settings-drop-element"></div><div display="DeepL" id="epmt-settings-drag-element-deepl" value="deepl" class="epmt-settings-drag-element" draggable="true">DeepL</div><div class="epmt-settings-drop-element"></div><div display="Colorful-clouds(彩云小译)" id="epmt-settings-drag-element-colorful-clouds" value="colorful-clouds" class="epmt-settings-drag-element" draggable="true">Colorful-clouds(彩云小译)</div><div class="epmt-settings-drop-element"></div><div display="Baidu(百度)" id="epmt-settings-drag-element-baidu" value="baidu" class="epmt-settings-drag-element" draggable="true">Baidu(百度)</div><div class="epmt-settings-drop-element"></div><div display="棵岩翻译" id="epmt-settings-drag-element-keyan" value="keyan" class="epmt-settings-drag-element" draggable="true">棵岩翻译</div><div class="epmt-settings-drop-element"></div><div display="小牛翻译" id="epmt-settings-drag-element-xiaoniu" value="xiaoniu" class="epmt-settings-drag-element" draggable="true">小牛翻译</div><div class="epmt-settings-drop-element"></div><div display="Google(谷歌)" id="epmt-settings-drag-element-google" value="google" class="epmt-settings-drag-element" draggable="true">Google(谷歌)</div><div class="epmt-settings-drop-element"></div></div>
+                    </div>
+                </div>
+            </div></div></div></body></html>

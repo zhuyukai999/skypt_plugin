@@ -1,0 +1,175 @@
+以下是有筛选条件的URL：
+curl 'https://skypt.gdcic.net/api/openplatform/project/list?projectName=%E5%BA%93%E5%9D%91%E5%B0%8F%E5%AD%A6%E6%A0%A1%E5%9B%AD%E6%95%B4%E4%BD%93%E6%8F%90%E5%8D%87%E5%B7%A5%E7%A8%8B&cityId=440300&orgName=%E6%B7%B1%E5%9C%B3%E5%B8%82%E8%AF%9A%E4%BF%A1%E8%A1%8C%E5%B7%A5%E7%A8%8B%E5%92%A8%E8%AF%A2%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8&projectClassId=1&projectCode=4403101511260102&kaptcha=VZYEU&pageNum=1&pageSize=10&kaptchaKey=smWiMJGKWSniPct3a6Y__lkdNLHdXdVmPDAXJy_u&flag=true' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: zh-CN,zh;q=0.9' \
+  -H 'Cache-Control: no-cache' \
+  -H 'Connection: keep-alive' \
+  -H 'Pragma: no-cache' \
+  -H 'Referer: https://skypt.gdcic.net/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"'
+  
+  projectName对应项目名称，cityId对应所在市，orgName对应建设单位，projectClassId对应项目分类，projectCode对应省级项目编号，kaptcha对应验证码
+  
+  以下是无筛选条件的URL：
+  curl 'https://skypt.gdcic.net/api/openplatform/project/list?kaptcha=YSKFG&pageNum=1&pageSize=10&kaptchaKey=Go0kMgaYcOo76RvZfNW5jInLYAks1TNR07OhFaMF&flag=true' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: zh-CN,zh;q=0.9' \
+  -H 'Cache-Control: no-cache' \
+  -H 'Connection: keep-alive' \
+  -H 'Pragma: no-cache' \
+  -H 'Referer: https://skypt.gdcic.net/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"'
+  
+  筛选区域的 HTML 结构截图：
+  <div data-v-2733bfb9="" data-v-36bb8e3c="" class="search-module-wrap"><div data-v-2733bfb9="" class="search-form-wrap"><div data-v-2733bfb9="" class="left"><div data-v-2733bfb9="" class="form-box"><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="项目名称" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><div data-v-2733bfb9="" tabindex="0" class="ant-select ant-select-enabled ant-select-allow-clear ant-select-lg select"><div role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-controls="fb6499c9-b1ba-417c-dbc6-9eb074f49e97" class="ant-select-selection ant-select-selection--single"><div class="ant-select-selection__rendered"><div unselectable="on" class="ant-select-selection__placeholder" style="display: block; user-select: none;">请选择所在市</div><div class="ant-select-search ant-select-search--inline" style="display: none;"><div class="ant-select-search__field__wrap"><input autocomplete="off" value="" class="ant-select-search__field"><span class="ant-select-search__field__mirror">&nbsp;</span></div></div></div><span unselectable="on" class="ant-select-arrow" style="user-select: none;"><i aria-label="图标: down" class="anticon anticon-down ant-select-arrow-icon"><svg viewBox="64 64 896 896" data-icon="down" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"></path></svg></i></span></div></div><!----><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="建设单位" type="text" class="input ant-input"><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><div data-v-2733bfb9="" tabindex="0" class="ant-select ant-select-enabled ant-select-allow-clear ant-select-lg select"><div role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-controls="75bec87b-1d1c-4fde-80a9-6b61956a08b9" class="ant-select-selection ant-select-selection--single"><div class="ant-select-selection__rendered"><div unselectable="on" class="ant-select-selection__placeholder" style="display: block; user-select: none;">请选择项目分类</div><div class="ant-select-search ant-select-search--inline" style="display: none;"><div class="ant-select-search__field__wrap"><input autocomplete="off" value="" class="ant-select-search__field"><span class="ant-select-search__field__mirror">&nbsp;</span></div></div></div><span unselectable="on" class="ant-select-arrow" style="user-select: none;"><i aria-label="图标: down" class="anticon anticon-down ant-select-arrow-icon"><svg viewBox="64 64 896 896" data-icon="down" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" class=""><path d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"></path></svg></i></span></div></div><!----><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item"><!----><input data-v-2733bfb9="" placeholder="省级项目编号" type="text" class="input ant-input" style=""><!----><!----><!----></div><div data-v-2733bfb9="" class="form-item valid-code"><!----><!----><!----><!----><input data-v-2733bfb9="" placeholder="请输入验证码" type="text" class="input ant-input" style="width: 200px;"><img data-v-2733bfb9="" src="data:image/jpeg;base64,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" class="valid-img"></div></div><p data-v-2733bfb9="" class="tips-box"> 数据分级的主要依据为数据产生或审核的行政主管部门层级。A级：省级住房和城乡建设主管部门审核确认；B级：市级住房和城乡建设主管部门审核确认；C级：县级住房和城乡建设主管部门审核确认；D级：建筑市场主体填报，未经行政主管部门审核。 </p></div><div data-v-2733bfb9="" class="right"><button data-v-2733bfb9="" class="serach-btn">搜索</button></div></div></div>
+  
+  API 返回的 JSON 原始结构（其中一条）：
+  {
+    "msg": "success",
+    "total": "264411",
+    "code": 0,
+    "rows": [
+        {
+            "searchValue": null,
+            "createBy": "陈思明",
+            "createTime": "2025-09-26 06:12:55",
+            "updateBy": "陈思明",
+            "updateTime": "2025-09-26 06:12:55",
+            "remark": null,
+            "beginTime": null,
+            "endTime": null,
+            "params": {},
+            "id": "1572",
+            "projectName": "曙光路(平步大道~永安路)工程",
+            "projectRole": "",
+            "province": "广东省",
+            "provinceId": "440000",
+            "divisionId": "440114",
+            "city": "广州市",
+            "division": "花都区",
+            "cityId": "440100",
+            "projectCode": "4401141512100201",
+            "projectClass": "市政工程",
+            "projectClassId": "2",
+            "orgName": "",
+            "orgId": "",
+            "buildUnit": [
+                {
+                    "id": null,
+                    "projectCode": null,
+                    "phaseId": null,
+                    "phase": null,
+                    "orgTypeId": 1,
+                    "orgType": "建设单位",
+                    "orgName": "广州市花都区交通局",
+                    "orgCode": "007514565",
+                    "certNum": null,
+                    "status": null,
+                    "pid": null
+                }
+            ],
+            "dataLevel": "A",
+            "address": "广州市花都区广州市花都区曙光路",
+            "approvalCode": "花发改基(2014)130号",
+            "approvalLevel": "区县级",
+            "approvalUnit": "广州市花都区发展和改革局",
+            "approvalDate": "2014-06-12 00:00:00",
+            "totalInvestment": "13347.42",
+            "totalArea": "0",
+            "totalLength": "1273",
+            "totalSpan": "0",
+            "scale": "项目位于花城街，呈南北走向，南起平步大道，北至永安路，全长1273米，规划道路红线宽标准段为40米。道路规划为城市次干路，设计时速40公里/小时，双向六车道。建设内容包括道路工程、桥梁工程、给水工程、排水工程、交通工程、绿化工程、照明工程、电力电缆沟工程、通信工程和综合管线工程等",
+            "nature": "新建",
+            "purpose": "道路",
+            "planBeginDate": "2014-12-22 00:00:00",
+            "planEndDate": null,
+            "publicInvest": null,
+            "foreignInvest": null,
+            "governInvest": null,
+            "hKInvest": null,
+            "countryInvest": null,
+            "privateInvest": null,
+            "forOrgInvest": null,
+            "otherInvest": null,
+            "communityInvest": null,
+            "delFlag": "0"
+        }
+            "searchValue": null,
+            "createBy": "42",
+            "createTime": "2015-12-12 00:55:36",
+            "updateBy": "42",
+            "updateTime": "2015-12-12 00:55:36",
+            "remark": null,
+            "beginTime": null,
+            "endTime": null,
+            "params": {},
+            "id": "1580",
+            "projectName": "温氏科技园生活区F区住宅楼项目",
+            "projectRole": "",
+            "province": "广东省",
+            "provinceId": "440000",
+            "divisionId": "445321",
+            "city": "云浮市",
+            "division": "新兴县",
+            "cityId": "445300",
+            "projectCode": "4453211512110101",
+            "projectClass": "房屋建筑工程",
+            "projectClassId": "1",
+            "orgName": "",
+            "orgId": "",
+            "buildUnit": [
+                {
+                    "id": null,
+                    "projectCode": null,
+                    "phaseId": null,
+                    "phase": null,
+                    "orgTypeId": 1,
+                    "orgType": "建设单位",
+                    "orgName": "广东温氏食品集团股份有限公司",
+                    "orgCode": "707813507",
+                    "certNum": null,
+                    "status": null,
+                    "pid": null
+                }
+            ],
+            "dataLevel": "D",
+            "address": "新兴县新城镇东堤北路温氏科技园",
+            "approvalCode": "2015-445321-70-03-001196",
+            "approvalLevel": "区县级",
+            "approvalUnit": "新兴县发展和改革局",
+            "approvalDate": "2015-03-26 00:00:00",
+            "totalInvestment": "91500",
+            "totalArea": "280000",
+            "totalLength": "0",
+            "totalSpan": "0",
+            "scale": "280000平方米",
+            "nature": "新建",
+            "purpose": "居住建筑",
+            "planBeginDate": null,
+            "planEndDate": null,
+            "publicInvest": null,
+            "foreignInvest": null,
+            "governInvest": null,
+            "hKInvest": null,
+            "countryInvest": null,
+            "privateInvest": null,
+            "forOrgInvest": null,
+            "otherInvest": null,
+            "communityInvest": null,
+            "delFlag": "0"
+        }
+    ],
+    "pageNum": 1
+}

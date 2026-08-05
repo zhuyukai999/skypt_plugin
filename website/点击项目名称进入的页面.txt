@@ -1,0 +1,216 @@
+<html lang="zh-cmn-Hans" class=" "><head><meta charset="utf-8"><meta name="renderer" content="webkit"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="ico.png"><style>#loading-mask{position:fixed;left:0;top:0;height:100%;width:100%;background:#fff;user-select:none;z-index:9999;overflow:hidden}.loading-wrapper{position:absolute;top:50%;left:50%;transform:translate(-50%,-100%)}.loading-dot{animation:antRotate 1.2s infinite linear;transform:rotate(45deg);position:relative;display:inline-block;font-size:64px;width:64px;height:64px;box-sizing:border-box}.loading-dot i{width:22px;height:22px;position:absolute;display:block;background-color:#1890ff;border-radius:100%;transform:scale(.75);transform-origin:50% 50%;opacity:.3;animation:antSpinMove 1s infinite linear alternate}.loading-dot i:nth-child(1){top:0;left:0}.loading-dot i:nth-child(2){top:0;right:0;-webkit-animation-delay:.4s;animation-delay:.4s}.loading-dot i:nth-child(3){right:0;bottom:0;-webkit-animation-delay:.8s;animation-delay:.8s}.loading-dot i:nth-child(4){bottom:0;left:0;-webkit-animation-delay:1.2s;animation-delay:1.2s}@keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@-webkit-keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@keyframes antSpinMove{to{opacity:1}}@-webkit-keyframes antSpinMove{to{opacity:1}}</style><script src="config.js"></script><link href="css/app.b47a5bfc.css" rel="preload" as="style"><link href="css/chunk-vendors.44621a64.css" rel="preload" as="style"><link href="js/app.b56f8d8c.js" rel="preload" as="script"><link href="js/chunk-vendors.09caadc1.js" rel="preload" as="script"><link href="css/chunk-vendors.44621a64.css" rel="stylesheet"><link href="css/app.b47a5bfc.css" rel="stylesheet"><title>数据开放平台</title><style type="text/css">
+.vue-cropper[data-v-6dae58fd] {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  direction: ltr;
+  touch-action: none;
+  text-align: left;
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAAA3NCSVQICAjb4U/gAAAABlBMVEXMzMz////TjRV2AAAACXBIWXMAAArrAAAK6wGCiw1aAAAAHHRFWHRTb2Z0d2FyZQBBZG9iZSBGaXJld29ya3MgQ1M26LyyjAAAABFJREFUCJlj+M/AgBVhF/0PAH6/D/HkDxOGAAAAAElFTkSuQmCC");
+}
+.cropper-box[data-v-6dae58fd],
+.cropper-box-canvas[data-v-6dae58fd],
+.cropper-drag-box[data-v-6dae58fd],
+.cropper-crop-box[data-v-6dae58fd],
+.cropper-face[data-v-6dae58fd] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  user-select: none;
+}
+.cropper-box-canvas img[data-v-6dae58fd] {
+  position: relative;
+  text-align: left;
+  user-select: none;
+  transform: none;
+  max-width: none;
+  max-height: none;
+}
+.cropper-box[data-v-6dae58fd] {
+  overflow: hidden;
+}
+.cropper-move[data-v-6dae58fd] {
+  cursor: move;
+}
+.cropper-crop[data-v-6dae58fd] {
+  cursor: crosshair;
+}
+.cropper-modal[data-v-6dae58fd] {
+  background: rgba(0, 0, 0, 0.5);
+}
+.cropper-crop-box[data-v-6dae58fd] {
+  /*border: 2px solid #39f;*/
+}
+.cropper-view-box[data-v-6dae58fd] {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  outline: 1px solid #39f;
+  outline-color: rgba(51, 153, 255, 0.75);
+  user-select: none;
+}
+.cropper-view-box img[data-v-6dae58fd] {
+  user-select: none;
+  text-align: left;
+  max-width: none;
+  max-height: none;
+}
+.cropper-face[data-v-6dae58fd] {
+  top: 0;
+  left: 0;
+  background-color: #fff;
+  opacity: 0.1;
+}
+.crop-info[data-v-6dae58fd] {
+  position: absolute;
+  left: 0px;
+  min-width: 65px;
+  text-align: center;
+  color: white;
+  line-height: 20px;
+  background-color: rgba(0, 0, 0, 0.8);
+  font-size: 12px;
+}
+.crop-line[data-v-6dae58fd] {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.1;
+}
+.line-w[data-v-6dae58fd] {
+  top: -3px;
+  left: 0;
+  height: 5px;
+  cursor: n-resize;
+}
+.line-a[data-v-6dae58fd] {
+  top: 0;
+  left: -3px;
+  width: 5px;
+  cursor: w-resize;
+}
+.line-s[data-v-6dae58fd] {
+  bottom: -3px;
+  left: 0;
+  height: 5px;
+  cursor: s-resize;
+}
+.line-d[data-v-6dae58fd] {
+  top: 0;
+  right: -3px;
+  width: 5px;
+  cursor: e-resize;
+}
+.crop-point[data-v-6dae58fd] {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0.75;
+  background-color: #39f;
+  border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+  top: -4px;
+  left: -4px;
+  cursor: nw-resize;
+}
+.point2[data-v-6dae58fd] {
+  top: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: n-resize;
+}
+.point3[data-v-6dae58fd] {
+  top: -4px;
+  right: -4px;
+  cursor: ne-resize;
+}
+.point4[data-v-6dae58fd] {
+  top: 50%;
+  left: -4px;
+  margin-top: -3px;
+  cursor: w-resize;
+}
+.point5[data-v-6dae58fd] {
+  top: 50%;
+  right: -4px;
+  margin-top: -3px;
+  cursor: e-resize;
+}
+.point6[data-v-6dae58fd] {
+  bottom: -5px;
+  left: -4px;
+  cursor: sw-resize;
+}
+.point7[data-v-6dae58fd] {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: s-resize;
+}
+.point8[data-v-6dae58fd] {
+  bottom: -5px;
+  right: -4px;
+  cursor: se-resize;
+}
+@media screen and (max-width: 500px) {
+.crop-point[data-v-6dae58fd] {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    opacity: 0.45;
+    background-color: #39f;
+    border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+    top: -10px;
+    left: -10px;
+}
+.point2[data-v-6dae58fd],
+  .point4[data-v-6dae58fd],
+  .point5[data-v-6dae58fd],
+  .point7[data-v-6dae58fd] {
+    display: none;
+}
+.point3[data-v-6dae58fd] {
+    top: -10px;
+    right: -10px;
+}
+.point4[data-v-6dae58fd] {
+    top: 0;
+    left: 0;
+}
+.point6[data-v-6dae58fd] {
+    bottom: -10px;
+    left: -10px;
+}
+.point8[data-v-6dae58fd] {
+    bottom: -10px;
+    right: -10px;
+}
+}
+</style><link rel="stylesheet" type="text/css" href="css/Layout.b9bc7063.css"><script charset="utf-8" src="js/Layout.39dcd092.js"></script><script charset="utf-8" src="js/chunk-0e52ad52.20149d44.js"></script><script charset="utf-8" src="js/chunk-92cae89c.f6186be4.js"></script><link rel="stylesheet" type="text/css" href="css/chunk-0f3d7edc.37df5669.css"><script charset="utf-8" src="js/chunk-0f3d7edc.4f37422e.js"></script><link rel="stylesheet" type="text/css" href="css/chunk-11e61320.e57686fd.css"><script charset="utf-8" src="js/chunk-11e61320.7dfe5541.js"></script><link rel="stylesheet" type="text/css" href="css/project.b8152269.css"><script charset="utf-8" src="js/project.eab6996d.js"></script></head><body><noscript><strong>We're sorry but mzw_apps doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"><div class="dop-layout"><div data-v-383e106a="" class="header-wrap"><div data-v-383e106a="" class="header-content"><div data-v-383e106a="" class="top-box"><img data-v-383e106a="" src="img/logo-dop.270b3b13.png" class="logo"></div><ul data-v-383e106a="" class="nav-list"><li data-v-383e106a="" class="">行业大数据</li><li data-v-383e106a="" class="">企业信息</li><li data-v-383e106a="" class="">人员信息</li><li data-v-383e106a="" class="router-link-active active">项目信息</li><li data-v-383e106a="" class="">诚信信息</li></ul></div><!----></div><div data-v-13f71a54="" class="page-container"><div data-v-f839fec0="" data-v-13f71a54="" class="placeholder" style="height: 262px;"><div data-v-f839fec0="" class="top-wrap"><div data-v-f839fec0="" class="banner-wrap"><h1 data-v-f839fec0="" class="name">厂房(自编D)工程1幢</h1></div><div data-v-f839fec0="" class="tab-wrap"><ul data-v-f839fec0="" class="tab"><li data-v-f839fec0="" class="active"> 基本信息 </li><li data-v-f839fec0="" class=""> 资金来源 </li><li data-v-f839fec0="" class=""> 项目环节 </li><li data-v-f839fec0="" class=""> 参建单位 </li><li data-v-f839fec0="" class=""> 关键岗位人员 </li><li data-v-f839fec0="" class=""> 项目诚信 </li></ul></div></div></div><div data-v-13f71a54="" class="main-container"><div data-v-13f71a54="" class="plate-wrap base-info-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">基本信息</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="info-content"><div data-v-13f71a54="" class="info-row"><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">省级项目编号</div><div data-v-13f71a54="" class="content">4401841512100101</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">项目分类</div><div data-v-13f71a54="" class="content">房屋建筑工程</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">建设单位</div><div data-v-13f71a54="" class="content"><p data-v-13f71a54="" class="value link-btn"><a data-v-13f71a54="" href="#/web/enterprise/detail?orgCode=691522333&amp;orgName=%E5%B9%BF%E5%B7%9E%E8%B5%9B%E8%8E%B1%E6%8B%89%E5%B9%B2%E7%BB%86%E8%83%9E%E7%A7%91%E6%8A%80%E8%82%A1%E4%BB%BD%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 广州赛莱拉干细胞科技股份有限公司 </a></p></div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">组织机构代码</div><div data-v-13f71a54="" class="content"><p data-v-13f71a54=""> 691522333 </p></div></div></div><div data-v-13f71a54="" class="info-row"><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">项目所在地</div><div data-v-13f71a54="" class="content">广东省广州市从化市</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">详细地址</div><div data-v-13f71a54="" class="content">从化市城郊街美都化妆品产业基地</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">立项文号</div><div data-v-13f71a54="" class="content">110184267010088</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">立项级别</div><div data-v-13f71a54="" class="content">区县级</div></div></div><div data-v-13f71a54="" class="info-row"><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">立项批复机关</div><div data-v-13f71a54="" class="content">从化区发展和改革局</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">立项批复时间</div><div data-v-13f71a54="" class="content">2011-03-09 00:00:00</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">总投资（万元）</div><div data-v-13f71a54="" class="content">2000</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">总面积/长度（平方米/米）</div><div data-v-13f71a54="" class="content">17099</div></div></div><div data-v-13f71a54="" class="info-row"><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">建设规模</div><div data-v-13f71a54="" class="content"> 17099平方米 </div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">建设性质</div><div data-v-13f71a54="" class="content">新建</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">工程用途</div><div data-v-13f71a54="" class="content">工业建筑</div></div><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">计划开工日期</div><div data-v-13f71a54="" class="content">2015-10-14 00:00:00</div></div></div><div data-v-13f71a54="" class="info-row"><div data-v-13f71a54="" class="row-item"><div data-v-13f71a54="" class="title">数据等级</div><div data-v-13f71a54="" class="content"> D </div></div></div></div></div></div><div data-v-13f71a54="" class="plate-wrap capital-source-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">资金来源</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="capital-source-box"><div data-v-13f71a54="" class="chart-box"><div data-v-07959733="" data-v-13f71a54="" class="chart-container" _echarts_instance_="ec_1784599323308" style="-webkit-tap-highlight-color: transparent; user-select: none;"><div style="position: relative; width: 1280px; height: 464px; padding: 0px; margin: 0px; border-width: 0px;"><canvas data-zr-dom-id="zr_0" width="1600" height="580" style="position: absolute; left: 0px; top: 0px; width: 1280px; height: 464px; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); padding: 0px; margin: 0px; border-width: 0px;"></canvas></div></div></div></div></div></div><div data-v-13f71a54="" class="plate-wrap project-link-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">项目环节</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="project-link-list"><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">工程招投标</div><p data-v-13f71a54="" class="value link-btn"> 4401841512100101-BD-001：厂房（自编D）工程1幢 </p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">合同信息</div><p data-v-13f71a54="" class="value link-btn"> 4401841512100101-HZ-001：厂房（自编D）工程1幢 </p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">施工图审查</div><p data-v-13f71a54="" class="value link-btn"> 4401841512100101-TX-001：厂房（自编D）工程1幢 </p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">施工许可</div><p data-v-13f71a54="" class="value link-btn"> 440184201512100101：厂房（自编D）工程1幢 </p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">工程竣工验收备案</div><p data-v-13f71a54="" class="value">无</p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">工程竣工验收信息</div><p data-v-13f71a54="" class="value">无</p></div><div data-v-13f71a54="" class="link-item"><div data-v-13f71a54="" class="title">业绩技术指标</div><p data-v-13f71a54="" class="value">无</p></div></div></div></div><div data-v-13f71a54="" class="plate-wrap build-company-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">参建单位</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="build-company-list"><div data-v-13f71a54="" class="company-item"><div data-v-13f71a54="" class="top">工程设计</div><ul data-v-13f71a54="" class="company-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">企业名称/姓名</div><p data-v-13f71a54="" class="value link-btn">广东名都设计有限公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">组织机构代码/身份证号码</div><p data-v-13f71a54="" class="value">231127578</p></li></ul></div><div data-v-13f71a54="" class="company-item"><div data-v-13f71a54="" class="top">工程监理</div><ul data-v-13f71a54="" class="company-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">企业名称/姓名</div><p data-v-13f71a54="" class="value link-btn">广东省建筑工程监理有限公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">组织机构代码/身份证号码</div><p data-v-13f71a54="" class="value">190346423</p></li></ul></div><div data-v-13f71a54="" class="company-item"><div data-v-13f71a54="" class="top">工程勘察</div><ul data-v-13f71a54="" class="company-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">企业名称/姓名</div><p data-v-13f71a54="" class="value link-btn">广东省湛江地质工程勘察院</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">组织机构代码/身份证号码</div><p data-v-13f71a54="" class="value">194370818</p></li></ul></div><div data-v-13f71a54="" class="company-item"><div data-v-13f71a54="" class="top">建筑施工</div><ul data-v-13f71a54="" class="company-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">企业名称/姓名</div><p data-v-13f71a54="" class="value link-btn">汕头市潮阳第二建筑总公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">组织机构代码/身份证号码</div><p data-v-13f71a54="" class="value">193277945</p></li></ul></div><div data-v-13f71a54="" class="company-item"><div data-v-13f71a54="" class="top">建设单位</div><ul data-v-13f71a54="" class="company-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">企业名称/姓名</div><p data-v-13f71a54="" class="value link-btn">广州赛莱拉干细胞科技股份有限公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">组织机构代码/身份证号码</div><p data-v-13f71a54="" class="value">691522333</p></li></ul></div><div data-v-13f71a54="" class="company-item flex center-center"><span data-v-13f71a54="" class="look-more-btn pointer">查看更多</span></div></div></div></div><div data-v-13f71a54="" class="plate-wrap employees-data-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">关键岗位人员</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="employees-list"><div data-v-13f71a54="" class="employees-item"><a data-v-13f71a54="" href="#/web/person/detail?id=7efec114b34df8471c6283c326ab19d8a10ebd2130f99421c56281b9f6ad4d63" class="" target="_blank"><div data-v-13f71a54="" class="top">陈伟明</div></a><ul data-v-13f71a54="" class="employees-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">工作单位</div><p data-v-13f71a54="" class="value">广东省湛江地质工程勘察院</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">担任角色</div><p data-v-13f71a54="" class="value">勘察项目负责人</p></li></ul></div><div data-v-13f71a54="" class="employees-item"><a data-v-13f71a54="" href="#/web/person/detail?id=65e0444b89c23c54c803ace0d97d332fa10ebd2130f99421c56281b9f6ad4d63" class="" target="_blank"><div data-v-13f71a54="" class="top">张奕淦</div></a><ul data-v-13f71a54="" class="employees-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">工作单位</div><p data-v-13f71a54="" class="value">广东省建筑工程监理有限公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">担任角色</div><p data-v-13f71a54="" class="value">项目总监</p></li></ul></div><div data-v-13f71a54="" class="employees-item"><a data-v-13f71a54="" href="#/web/person/detail?id=02bf22f419426fdd5adb41f12fef0ea44365b41d21a1a642fcacf639b022c806" class="" target="_blank"><div data-v-13f71a54="" class="top">麻海松</div></a><ul data-v-13f71a54="" class="employees-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">工作单位</div><p data-v-13f71a54="" class="value">汕头市潮阳第二建筑总公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">担任角色</div><p data-v-13f71a54="" class="value">技术负责人</p></li></ul></div><div data-v-13f71a54="" class="employees-item"><a data-v-13f71a54="" href="#/web/person/detail?id=af5c8ce656efe001d80e9e40012f375d0787ca39bbf84767ddc9a6057dba035a" class="" target="_blank"><div data-v-13f71a54="" class="top">张劲松</div></a><ul data-v-13f71a54="" class="employees-info"><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">工作单位</div><p data-v-13f71a54="" class="value">广东名都设计有限公司</p></li><li data-v-13f71a54=""><div data-v-13f71a54="" class="title">担任角色</div><p data-v-13f71a54="" class="value">设计项目负责人</p></li></ul></div><div data-v-13f71a54="" class="employees-item"><span data-v-13f71a54="" class="look-more-btn">查看更多</span></div></div></div></div><div data-v-13f71a54="" class="plate-wrap credit-data-point"><div data-v-13f71a54="" class="plate-top"><h2 data-v-13f71a54="" class="title">项目诚信</h2></div><div data-v-13f71a54="" class="plate-content"><div data-v-13f71a54="" class="empty-tips">暂无信息</div></div></div></div><!----><!----></div><footer data-v-039f9258="" class="footer-wrap"><div data-v-039f9258="" class="footer-content"><div data-v-039f9258="" class="left"><p data-v-039f9258="" class="title">相关链接</p><ul data-v-039f9258="" class="links"><li data-v-039f9258=""><a data-v-039f9258="" href="http://zfcxjst.gd.gov.cn/" target="_blank">广东省住房和城乡建设厅</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="https://sk.gdcic.net/Approve" target="_blank">三库一平台管理信息服务系统</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="http://210.76.85.73/" target="_blank">进粤企业和人员诚信信息登记平台</a></li></ul></div></div></footer><!----></div></div><script src="npm/vue@2.6.10/dist/vue.min.js"></script><script src="npm/axios@0.19.0/dist/axios.min.js"></script><script src="npm/vue-router@3.1.2/dist/vue-router.min.js"></script><script src="npm/vuex@3.1.1/dist/vuex.min.js"></script><script src="npm/moment@2.24.0/moment.min.js"></script><script src="npm/moment@2.24.0/locale/zh-cn.js"></script><script src="npm/@antv/g2@3.5.7/dist/g2.min.js"></script><script src="npm/@antv/data-set@0.10.2/dist/data-set.min.js"></script><script>function isWeiXin() {
+          var ua = window.navigator.userAgent.toLowerCase();
+          //console.log(ua);//mozilla/5.0 (iphone; cpu iphone os 9_1 like mac os x) applewebkit/601.1.46 (khtml, like gecko)version/9.0 mobile/13b143 safari/601.1
+          if (ua.match(/MicroMessenger/i) == 'micromessenger') {
+              return true;
+          }
+          else {
+              return false;
+          }
+      }
+      if(isWeiXin()){
+          window.location='weixin.html'
+          console.log(" 是来自微信内置浏览器");
+      }
+      window.config = window.config || {}
+      document.title = window.config.title</script><script src="js/chunk-vendors.09caadc1.js"></script><script src="js/app.b56f8d8c.js"></script><!----></body></html>

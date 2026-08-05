@@ -1,0 +1,216 @@
+<html lang="zh-cmn-Hans" class=" "><head><meta charset="utf-8"><meta name="renderer" content="webkit"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="ico.png"><style>#loading-mask{position:fixed;left:0;top:0;height:100%;width:100%;background:#fff;user-select:none;z-index:9999;overflow:hidden}.loading-wrapper{position:absolute;top:50%;left:50%;transform:translate(-50%,-100%)}.loading-dot{animation:antRotate 1.2s infinite linear;transform:rotate(45deg);position:relative;display:inline-block;font-size:64px;width:64px;height:64px;box-sizing:border-box}.loading-dot i{width:22px;height:22px;position:absolute;display:block;background-color:#1890ff;border-radius:100%;transform:scale(.75);transform-origin:50% 50%;opacity:.3;animation:antSpinMove 1s infinite linear alternate}.loading-dot i:nth-child(1){top:0;left:0}.loading-dot i:nth-child(2){top:0;right:0;-webkit-animation-delay:.4s;animation-delay:.4s}.loading-dot i:nth-child(3){right:0;bottom:0;-webkit-animation-delay:.8s;animation-delay:.8s}.loading-dot i:nth-child(4){bottom:0;left:0;-webkit-animation-delay:1.2s;animation-delay:1.2s}@keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@-webkit-keyframes antRotate{to{-webkit-transform:rotate(405deg);transform:rotate(405deg)}}@keyframes antSpinMove{to{opacity:1}}@-webkit-keyframes antSpinMove{to{opacity:1}}</style><script src="config.js"></script><link href="css/app.b47a5bfc.css" rel="preload" as="style"><link href="css/chunk-vendors.44621a64.css" rel="preload" as="style"><link href="js/app.b56f8d8c.js" rel="preload" as="script"><link href="js/chunk-vendors.09caadc1.js" rel="preload" as="script"><link href="css/chunk-vendors.44621a64.css" rel="stylesheet"><link href="css/app.b47a5bfc.css" rel="stylesheet"><title>数据开放平台</title><style type="text/css">
+.vue-cropper[data-v-6dae58fd] {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  direction: ltr;
+  touch-action: none;
+  text-align: left;
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAAA3NCSVQICAjb4U/gAAAABlBMVEXMzMz////TjRV2AAAACXBIWXMAAArrAAAK6wGCiw1aAAAAHHRFWHRTb2Z0d2FyZQBBZG9iZSBGaXJld29ya3MgQ1M26LyyjAAAABFJREFUCJlj+M/AgBVhF/0PAH6/D/HkDxOGAAAAAElFTkSuQmCC");
+}
+.cropper-box[data-v-6dae58fd],
+.cropper-box-canvas[data-v-6dae58fd],
+.cropper-drag-box[data-v-6dae58fd],
+.cropper-crop-box[data-v-6dae58fd],
+.cropper-face[data-v-6dae58fd] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  user-select: none;
+}
+.cropper-box-canvas img[data-v-6dae58fd] {
+  position: relative;
+  text-align: left;
+  user-select: none;
+  transform: none;
+  max-width: none;
+  max-height: none;
+}
+.cropper-box[data-v-6dae58fd] {
+  overflow: hidden;
+}
+.cropper-move[data-v-6dae58fd] {
+  cursor: move;
+}
+.cropper-crop[data-v-6dae58fd] {
+  cursor: crosshair;
+}
+.cropper-modal[data-v-6dae58fd] {
+  background: rgba(0, 0, 0, 0.5);
+}
+.cropper-crop-box[data-v-6dae58fd] {
+  /*border: 2px solid #39f;*/
+}
+.cropper-view-box[data-v-6dae58fd] {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  outline: 1px solid #39f;
+  outline-color: rgba(51, 153, 255, 0.75);
+  user-select: none;
+}
+.cropper-view-box img[data-v-6dae58fd] {
+  user-select: none;
+  text-align: left;
+  max-width: none;
+  max-height: none;
+}
+.cropper-face[data-v-6dae58fd] {
+  top: 0;
+  left: 0;
+  background-color: #fff;
+  opacity: 0.1;
+}
+.crop-info[data-v-6dae58fd] {
+  position: absolute;
+  left: 0px;
+  min-width: 65px;
+  text-align: center;
+  color: white;
+  line-height: 20px;
+  background-color: rgba(0, 0, 0, 0.8);
+  font-size: 12px;
+}
+.crop-line[data-v-6dae58fd] {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.1;
+}
+.line-w[data-v-6dae58fd] {
+  top: -3px;
+  left: 0;
+  height: 5px;
+  cursor: n-resize;
+}
+.line-a[data-v-6dae58fd] {
+  top: 0;
+  left: -3px;
+  width: 5px;
+  cursor: w-resize;
+}
+.line-s[data-v-6dae58fd] {
+  bottom: -3px;
+  left: 0;
+  height: 5px;
+  cursor: s-resize;
+}
+.line-d[data-v-6dae58fd] {
+  top: 0;
+  right: -3px;
+  width: 5px;
+  cursor: e-resize;
+}
+.crop-point[data-v-6dae58fd] {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0.75;
+  background-color: #39f;
+  border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+  top: -4px;
+  left: -4px;
+  cursor: nw-resize;
+}
+.point2[data-v-6dae58fd] {
+  top: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: n-resize;
+}
+.point3[data-v-6dae58fd] {
+  top: -4px;
+  right: -4px;
+  cursor: ne-resize;
+}
+.point4[data-v-6dae58fd] {
+  top: 50%;
+  left: -4px;
+  margin-top: -3px;
+  cursor: w-resize;
+}
+.point5[data-v-6dae58fd] {
+  top: 50%;
+  right: -4px;
+  margin-top: -3px;
+  cursor: e-resize;
+}
+.point6[data-v-6dae58fd] {
+  bottom: -5px;
+  left: -4px;
+  cursor: sw-resize;
+}
+.point7[data-v-6dae58fd] {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -3px;
+  cursor: s-resize;
+}
+.point8[data-v-6dae58fd] {
+  bottom: -5px;
+  right: -4px;
+  cursor: se-resize;
+}
+@media screen and (max-width: 500px) {
+.crop-point[data-v-6dae58fd] {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    opacity: 0.45;
+    background-color: #39f;
+    border-radius: 100%;
+}
+.point1[data-v-6dae58fd] {
+    top: -10px;
+    left: -10px;
+}
+.point2[data-v-6dae58fd],
+  .point4[data-v-6dae58fd],
+  .point5[data-v-6dae58fd],
+  .point7[data-v-6dae58fd] {
+    display: none;
+}
+.point3[data-v-6dae58fd] {
+    top: -10px;
+    right: -10px;
+}
+.point4[data-v-6dae58fd] {
+    top: 0;
+    left: 0;
+}
+.point6[data-v-6dae58fd] {
+    bottom: -10px;
+    left: -10px;
+}
+.point8[data-v-6dae58fd] {
+    bottom: -10px;
+    right: -10px;
+}
+}
+</style><link rel="stylesheet" type="text/css" href="css/Layout.b9bc7063.css"><script charset="utf-8" src="js/Layout.39dcd092.js"></script><link rel="stylesheet" type="text/css" href="css/permit.8b15b6f6.css"><script charset="utf-8" src="js/permit.aec665d4.js"></script></head><body><noscript><strong>We're sorry but mzw_apps doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"><div class="dop-layout"><div data-v-383e106a="" class="header-wrap"><div data-v-383e106a="" class="header-content"><div data-v-383e106a="" class="top-box"><img data-v-383e106a="" src="img/logo-dop.270b3b13.png" class="logo"></div><ul data-v-383e106a="" class="nav-list"><li data-v-383e106a="" class="">行业大数据</li><li data-v-383e106a="" class="">企业信息</li><li data-v-383e106a="" class="">人员信息</li><li data-v-383e106a="" class="">项目信息</li><li data-v-383e106a="" class="">诚信信息</li></ul></div><!----></div><div data-v-4e85776a="" class="page-container"><div data-v-4e85776a="" class="main-container"><div data-v-4e85776a="" class="left"><ul data-v-4e85776a="" class="category-list"><li data-v-4e85776a="" class="list-item selected"> 电子证书 </li><li data-v-4e85776a="" class="list-item"> 电子表格 </li></ul></div><div data-v-4e85776a="" class="right"><div data-v-4e85776a="" class="title-box">电子证书</div><div data-v-4e85776a="" class="certificate-content-wrap" style=""><div data-v-4e85776a="" class="cover-box"><div data-v-4e85776a="" class="head"></div><p data-v-4e85776a="" class="number">编号：441631202012100402</p><p data-v-4e85776a="" class="text">根据《中华人民共和国建筑法》第八条规定，经审查，本建筑工程符合施工条件，准予施工。</p><p data-v-4e85776a="" class="text2">特发此证</p><div data-v-4e85776a="" class="bottom"><div data-v-4e85776a="" class="qrcode"><img data-v-4e85776a="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAAQAElEQVR4AeydV4glRRfHu9acRxEDpsWACIY1oCsLBlAMLwYwgKAsiIIo6j7ogoiICOqDriiCIsiKgrpgeFARBV1FUDErmGVQxICYc/q++7t3/nXPLau6unvu7PQdW/Y/p/rUOadO1fF2V+rqRf/r/lvQLbCo6P5b0C3QBXhBh7cougB3AV7gLbDAq9f9grsAL/AWWODV637B//UAO+cK58YP267bbLONL+Opp56yWT69Zs0aL+Nc2h+vECTOP/98q18pbU3sscceXgdfbF6VtHNpn51rnpcru/sF51powvO7AE94AHPu1wpwb06vaIpvvvkm6Qt5snv99df7W6Fzw1sXt0XJhNQadm6o88orr/is22+/3ftO2mdUTHz00Ude/7TTTquoFRez9Q3rUuU6bjXOrRXguImO2+YW6ALc5uiMwbfGAT7qqKMKepZlOPvss2u7ePfddxfcDgE935iBTz/9dKRsK4OecMUVV4zIyde33nrLlyHZGJV8Gb3hhht88c8//7wv76CDDvL8sgRtVGafPNq6zEZZXuMA08gff/xxUYbPP/+8rOxo3o477ljsvvvufUxNTUVl/vzzz5FyrZB0oV9//fWInHz9448/+vaRKYPkyyjPU5X/66+/+vKmp6fFLqW0UZl98mjrUiMlmY0DXGKzy2pRCwQBbpFnPVfOOuus4oEHHujj0ksv7XHy/04//fRCOO+88/q6siHKr1YyZVTy0O23394XvmLFCm8XH31GCxOtDvB+++1XMCQBhx9+eKXmYzglHHzwwV4fG8LWW29dSKaMSh662Wab+fKXLl3q7eKjz2hhotUBbmF7TZxLrQvw/fffXzDZAV588UXfoO+9957nI3P55ZcXOeywww5e3yaWLFmS1LVy+CB89913PuuRRx7xvigfir/y6eKLL/by85loXYDvvPPOYuXKlX0888wzvm3efPPNPo88ZK677roih5122snr28Shhx6a1LVyK2f8gNre8r333ut9IU/AX/l01VVXWVPzlm5dgOetJRZowY0DvGzZsuKYY44pxYEHHli72dCR3b/++qtg+RB89dVXviwmEeAJthDxoD/++KPN8unPPvvM233ppZc8n4TKLqPbbbcdomOBrW+qTNq6aWGNA8yM05NPPlmU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" style="display: inline-block;"></div><div data-v-4e85776a="" class="sign"> 发证机关：江东新区自然资源和城乡建设局（交通运输局、生态环境局）<br data-v-4e85776a=""> 发证日期：2020-12-10 </div></div></div><div data-v-4e85776a="" class="table-box"><table data-v-4e85776a=""><colgroup data-v-4e85776a=""><col data-v-4e85776a="" width="150"></colgroup><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">建设单位</td><td data-v-4e85776a="" colspan="3">河源市江东新区公用事业有限公司</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">工程名称</td><td data-v-4e85776a="" colspan="3">江东新区产业园区北片区污水处理厂(一期）</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">建设地址</td><td data-v-4e85776a="" colspan="3">河源市江东新区产业园区东环南路南面经六北路东边</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">建设规模</td><td data-v-4e85776a="" style="width: 160px;">24697.80㎡</td><td data-v-4e85776a="" class="label">合同价格</td><td data-v-4e85776a="">5118.61万元</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">工程总承包单位</td><td data-v-4e85776a="" colspan="3">  </td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">勘察单位</td><td data-v-4e85776a="" colspan="3" class="link"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=232610203&amp;orgName=%E6%A0%B8%E5%B7%A5%E4%B8%9A%E6%B2%B3%E6%BA%90%E5%B7%A5%E7%A8%8B%E5%8B%98%E5%AF%9F%E9%99%A2" class="" target="_blank"> 核工业河源工程勘察院 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">设计单位</td><td data-v-4e85776a="" colspan="3" class="link"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=190344671&amp;orgName=%E5%B9%BF%E4%B8%9C%E7%9C%81%E7%8E%AF%E5%A2%83%E4%BF%9D%E6%8A%A4%E5%B7%A5%E7%A8%8B%E7%A0%94%E7%A9%B6%E8%AE%BE%E8%AE%A1%E9%99%A2%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 广东省环境保护工程研究设计院有限公司 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">施工单位</td><td data-v-4e85776a="" colspan="3" class="link"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=15499620X&amp;orgName=%E5%8E%A6%E9%97%A8%E5%AE%89%E8%83%BD%E5%BB%BA%E8%AE%BE%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 厦门安能建设有限公司 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">监理单位</td><td data-v-4e85776a="" colspan="3" class="link"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=712389923&amp;orgName=%E6%B2%B3%E6%BA%90%E5%B8%82%E5%BB%BA%E8%AE%BE%E5%B7%A5%E7%A8%8B%E7%9B%91%E7%90%86%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 河源市建设工程监理有限公司 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">建设单位项目负责人</td><td data-v-4e85776a="" class="link"><a data-v-4e85776a="" href="#/web/person/detail?id=6ab93eded1311f22aae1f0ba6364bf90a11276c6b92c34aebd54d5b5c3d161e6" class="" target="_blank"> 赖伟初 </a></td><td data-v-4e85776a="" class="label">工程总承包项目经理</td><td data-v-4e85776a="" class="link">  </td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">勘察单位项目负责人</td><td data-v-4e85776a="" class="link"><a data-v-4e85776a="" href="#/web/person/detail?id=4a5e7683bb6fb59ac1bd6eb8978ca51283c63f90273b78bc5b02a5f8bebe65a4" class="" target="_blank"> 练妙龙 </a></td><td data-v-4e85776a="" class="label">设计单位项目负责人</td><td data-v-4e85776a="" class="link"><a data-v-4e85776a="" href="#/web/person/detail?id=628098c27f9caa0ccd14c7626a354bc9306fdd3d3f27c9ae46b1ee70466feace" class="" target="_blank"> 赵华标 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">施工单位项目负责人</td><td data-v-4e85776a="" class="link"><a data-v-4e85776a="" href="#/web/person/detail?id=99520ad8a3c51bc22804f7f63658a57c83c63f90273b78bc5b02a5f8bebe65a4" class="" target="_blank"> 谭成刚 </a></td><td data-v-4e85776a="" class="label">总监理工程师</td><td data-v-4e85776a="" class="link"><a data-v-4e85776a="" href="#/web/person/detail?id=fb1449498409e8b996e0a86a982753580787ca39bbf84767ddc9a6057dba035a" class="" target="_blank"> 陈小武 </a></td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">合同工期</td><td data-v-4e85776a="" colspan="3">2019-06-18 ～ 2020-06-18</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">状态</td><td data-v-4e85776a="" colspan="3">正常</td></tr><tr data-v-4e85776a=""><td data-v-4e85776a="" class="label">备注</td><td data-v-4e85776a="" colspan="3"><tr data-v-4e85776a=""> 质量监督注册号:2020-038;安全监督注册号:2020-038 </tr></td></tr></table><div data-v-4e85776a="" class="tips"><h2 data-v-4e85776a="">注意事项</h2><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">一、</span><span data-v-4e85776a="" class="text">本证放置施工现场，作为准予施工的凭证。</span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">二、</span><span data-v-4e85776a="" class="text">未经发证机关许可，本证的各项内容不得变更。</span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">三、</span><span data-v-4e85776a="" class="text">住房城乡建设行政主管部门可以对本证进行查验。</span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">四、</span><span data-v-4e85776a="" class="text">本证自发证之日起三个月内应予施工，逾期应办理延期手续，不办理延期或延期次数、时间超过法定时间的，本证自行废止。 </span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">五、</span><span data-v-4e85776a="" class="text">在建的建筑工程因故中止施工的，建设单位应当自中止施工之日起一个月内向发证机关报告，并按照规定做好建筑工程的维护管理工作。 </span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">六、</span><span data-v-4e85776a="" class="text">建筑工程恢复施工时，应当向发证机关报告；中止施工满一年的工程恢复施工前，建设单位应当报发证机关检验施工许可证。 </span></p><p data-v-4e85776a=""><span data-v-4e85776a="" class="sort">七、</span><span data-v-4e85776a="" class="text">凡未取得本证擅自施工的属违法建设，将按《中华人民共和国建筑法》的规定予以处罚。 </span></p></div></div></div><div data-v-4e85776a="" class="certificate-detail-wrap" style="display: none;"><h1 data-v-4e85776a="" class="project-name">江东新区产业园区北片区污水处理厂(一期）</h1><div data-v-4e85776a="" class="plate-wrap"><div data-v-4e85776a="" class="plate-top"><h2 data-v-4e85776a="" class="title">基本信息</h2></div><div data-v-4e85776a="" class="plate-content"><div data-v-4e85776a="" class="info-content"><div data-v-4e85776a="" class="info-row"><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">省级施工许可证编号</div><div data-v-4e85776a="" class="content">江东新区产业园区北片区污水处理厂(一期）</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">发证机关</div><div data-v-4e85776a="" class="content">江东新区自然资源和城乡建设局（交通运输局、生态环境局）</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">发证日期</div><div data-v-4e85776a="" class="content">2020-12-10</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">状态</div><div data-v-4e85776a="" class="content">正常</div></div></div><div data-v-4e85776a="" class="info-row"><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">建设地址</div><div data-v-4e85776a="" class="content">河源市江东新区产业园区东环南路南面经六北路东边</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">建设性质</div><div data-v-4e85776a="" class="content">新建</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">结构体系</div><div data-v-4e85776a="" class="content">混合结构</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">合同价格</div><div data-v-4e85776a="" class="content">5118.61万元</div></div></div><div data-v-4e85776a="" class="info-row"><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">施工面积</div><div data-v-4e85776a="" class="content">24697.8</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">合同开工日期</div><div data-v-4e85776a="" class="content">2019-06-18 00:00:00</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">合同竣工日期</div><div data-v-4e85776a="" class="content">2020-06-18 00:00:00</div></div><div data-v-4e85776a="" class="row-item"><div data-v-4e85776a="" class="title">建设规模</div><div data-v-4e85776a="" class="content">24697.80㎡</div></div></div></div></div></div><div data-v-4e85776a="" class="plate-wrap"><div data-v-4e85776a="" class="plate-top"><h2 data-v-4e85776a="" class="title">五方责任主体及项目负责人</h2></div><div data-v-4e85776a="" class="plate-content"><div data-v-4e85776a="" class="employees-list"><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">建设单位</div><p data-v-4e85776a="" class="value">河源市江东新区公用事业有限公司</p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">项目负责人</div><p data-v-4e85776a="" class="value">赖伟初</p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">工程总承包单位</div><p data-v-4e85776a="" class="value">  </p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">工程总承包项目经理</div><p data-v-4e85776a="" class="value">  </p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">勘察单位</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=232610203&amp;orgName=%E6%A0%B8%E5%B7%A5%E4%B8%9A%E6%B2%B3%E6%BA%90%E5%B7%A5%E7%A8%8B%E5%8B%98%E5%AF%9F%E9%99%A2" class="" target="_blank"> 核工业河源工程勘察院 </a></p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">项目负责人</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/person/detail?id=4a5e7683bb6fb59ac1bd6eb8978ca51283c63f90273b78bc5b02a5f8bebe65a4" class="" target="_blank"> 练妙龙 </a></p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">设计单位</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=190344671&amp;orgName=%E5%B9%BF%E4%B8%9C%E7%9C%81%E7%8E%AF%E5%A2%83%E4%BF%9D%E6%8A%A4%E5%B7%A5%E7%A8%8B%E7%A0%94%E7%A9%B6%E8%AE%BE%E8%AE%A1%E9%99%A2%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 广东省环境保护工程研究设计院有限公司 </a></p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">项目负责人</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/person/detail?id=628098c27f9caa0ccd14c7626a354bc9306fdd3d3f27c9ae46b1ee70466feace" class="" target="_blank"> 赵华标 </a></p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">施工单位</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=15499620X&amp;orgName=%E5%8E%A6%E9%97%A8%E5%AE%89%E8%83%BD%E5%BB%BA%E8%AE%BE%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 厦门安能建设有限公司 </a></p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">项目负责人</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/person/detail?id=99520ad8a3c51bc22804f7f63658a57c83c63f90273b78bc5b02a5f8bebe65a4" class="" target="_blank"> 谭成刚 </a></p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">监理单位</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/enterprise/detail?orgCode=712389923&amp;orgName=%E6%B2%B3%E6%BA%90%E5%B8%82%E5%BB%BA%E8%AE%BE%E5%B7%A5%E7%A8%8B%E7%9B%91%E7%90%86%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8" class="" target="_blank"> 河源市建设工程监理有限公司 </a></p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">总监理工程师</div><p data-v-4e85776a="" class="value"><a data-v-4e85776a="" href="#/web/person/detail?id=fb1449498409e8b996e0a86a982753580787ca39bbf84767ddc9a6057dba035a" class="" target="_blank"> 陈小武 </a></p></li></ul></div></div></div></div><div data-v-4e85776a="" class="plate-wrap"><div data-v-4e85776a="" class="plate-top"><h2 data-v-4e85776a="" class="title">相关（环节）文书</h2></div><div data-v-4e85776a="" class="plate-content"><div data-v-4e85776a="" class="employees-list"><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">建设规划用地许可证编号</div><p data-v-4e85776a="" class="value"></p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">建设工程规划许可证编号</div><p data-v-4e85776a="" class="value"></p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">中标通知书编号</div><p data-v-4e85776a="" class="value">4416312011170201-BG-001</p></li><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">施工图审查合格书编号</div><p data-v-4e85776a="" class="value">4416312011170201-TX-001</p></li></ul></div><div data-v-4e85776a="" class="employees-item"><ul data-v-4e85776a="" class="employees-info"><li data-v-4e85776a=""><div data-v-4e85776a="" class="title">合同编号</div><p data-v-4e85776a="" class="value"></p></li></ul></div></div></div></div></div></div></div></div><footer data-v-039f9258="" class="footer-wrap"><div data-v-039f9258="" class="footer-content"><div data-v-039f9258="" class="left"><p data-v-039f9258="" class="title">相关链接</p><ul data-v-039f9258="" class="links"><li data-v-039f9258=""><a data-v-039f9258="" href="http://zfcxjst.gd.gov.cn/" target="_blank">广东省住房和城乡建设厅</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="https://sk.gdcic.net/Approve" target="_blank">三库一平台管理信息服务系统</a></li><li data-v-039f9258=""><a data-v-039f9258="" href="http://210.76.85.73/" target="_blank">进粤企业和人员诚信信息登记平台</a></li></ul></div></div></footer><!----></div></div><script src="npm/vue@2.6.10/dist/vue.min.js"></script><script src="npm/axios@0.19.0/dist/axios.min.js"></script><script src="npm/vue-router@3.1.2/dist/vue-router.min.js"></script><script src="npm/vuex@3.1.1/dist/vuex.min.js"></script><script src="npm/moment@2.24.0/moment.min.js"></script><script src="npm/moment@2.24.0/locale/zh-cn.js"></script><script src="npm/@antv/g2@3.5.7/dist/g2.min.js"></script><script src="npm/@antv/data-set@0.10.2/dist/data-set.min.js"></script><script>function isWeiXin() {
+          var ua = window.navigator.userAgent.toLowerCase();
+          //console.log(ua);//mozilla/5.0 (iphone; cpu iphone os 9_1 like mac os x) applewebkit/601.1.46 (khtml, like gecko)version/9.0 mobile/13b143 safari/601.1
+          if (ua.match(/MicroMessenger/i) == 'micromessenger') {
+              return true;
+          }
+          else {
+              return false;
+          }
+      }
+      if(isWeiXin()){
+          window.location='weixin.html'
+          console.log(" 是来自微信内置浏览器");
+      }
+      window.config = window.config || {}
+      document.title = window.config.title</script><script src="js/chunk-vendors.09caadc1.js"></script><script src="js/app.b56f8d8c.js"></script><!----></body></html>
