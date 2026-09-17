@@ -32,6 +32,12 @@
         .input-combo .btn-combo { flex-shrink: 0; padding: 6px 10px; border: 1px solid #1890ff; background: #fff; color: #1890ff; border-radius: 4px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
         .input-combo .btn-combo:hover { background: #1890ff; color: #fff; }
         input:disabled, select:disabled { background: #f5f5f5; cursor: not-allowed; color: #bfbfbf; }
+        /* 🔴 极速模式隐藏整行（查询范围+起止页码），兼容模式显示 */
+        .row-hide-in-rapid { display: flex; }
+        body.rapid-mode .row-hide-in-rapid { display: none !important; }
+        /* 🔴 极速模式「获取全部数据」按钮高亮 */
+        .btn-fetch-all { background: linear-gradient(135deg, #722ed1, #13c2c2); color: #fff; font-weight: 600; }
+        .btn-fetch-all:hover { filter: brightness(1.08); }
         .btn { padding: 7px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
         .btn-primary { background: #1890ff; color: #fff; }
         .btn-primary:hover { background: #40a9ff; }
@@ -79,23 +85,24 @@
         <div class="subtitle">批量提取基本信息、施工许可、竣工验收备案数据</div>
     </div>
     <div class="container">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <div class="tabs" style="flex: 1; border-bottom: 2px solid #e8e8e8; display: flex; margin-bottom: 0;">
-                <div class="tab active" data-tab="basic">基本信息</div>
-                <div class="tab" data-tab="permit">施工许可</div>
-                <div class="tab" data-tab="complete">竣工验收备案</div>
-                <div class="tab" data-tab="merge">合并导出</div>
-                <div class="tab" data-tab="upload">去重上传</div>
-            </div>
-            <div style="padding-left: 12px; display: flex; align-items: center; gap: 6px;">
-                <label style="font-size: 12px; color: #666;">显示方式：</label>
-                <select id="displayMode" style="padding: 5px 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 12px; cursor: pointer;">
-                    <option value="popup" selected>弹窗</option>
-                    <option value="window">新窗口</option>
-                    <option value="sidebar">侧边栏</option>
-                </select>
-            </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: nowrap; overflow: hidden; max-width: 100%;">
+        <div class="tabs" style="flex: 1; border-bottom: 2px solid #e8e8e8; display: flex; margin-bottom: 0; flex-wrap: nowrap; overflow: hidden; align-items: center;">
+            <div class="tab active" data-tab="basic" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'basic')" style="white-space: nowrap;">基本信息</div>
+            <div class="tab" data-tab="permit" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'permit')" style="white-space: nowrap;">施工许可</div>
+            <div class="tab" data-tab="complete" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'complete')" style="white-space: nowrap;">竣工验收备案</div>
+            <div class="tab" data-tab="merge" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'merge')" style="white-space: nowrap;">合并导出</div>
+            <div class="tab" data-tab="tianyancha" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'tianyancha')" style="white-space: nowrap;">天眼查补全</div>
+            <div class="tab" data-tab="upload" onclick="window.__switchTab &amp;&amp; window.__switchTab(this, 'upload')" style="white-space: nowrap;">去重上传</div>
         </div>
+        <div style="padding-left: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; flex-shrink: 0;">
+            <label style="font-size: 12px; color: #666; white-space: nowrap; line-height: 1;">显示方式：</label>
+            <select id="displayMode" style="padding: 5px 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 12px; cursor: pointer; line-height: 1;">
+                <option value="popup" selected>弹窗</option>
+                <option value="window">新窗口</option>
+                <option value="sidebar">侧边栏</option>
+            </select>
+        </div>
+    </div>
 
         <!-- 基本信息 -->
         <div class="tab-content active" id="tab-basic">
@@ -113,8 +120,8 @@
                 </div>
                 <div class="form-item"><label>所在城市</label><input type="text" id="basic-city" placeholder="支持模糊查询"></div>
             </div>
-            <!-- 🔴✅ 需求3：查询范围选择 + 页码（选仅当前页/全部页时禁用页码输入） -->
-            <div class="form-row">
+            <!-- 🔴 查询范围 + 页码：仅兼容模式显示（极速模式自动隐藏） -->
+            <div class="form-row row-hide-in-rapid" data-type-row="basic">
                 <div class="form-item">
                     <label>查询范围</label>
                     <select id="basic-pageMode">
@@ -126,26 +133,31 @@
                 <div class="form-item"><label>起始页码</label><input type="number" id="basic-startPage" value="1" min="1"></div>
                 <div class="form-item"><label>结束页码</label><input type="number" id="basic-endPage" value="1" min="1"></div>
             </div>
-            <!-- 🔴✅ 新增：抓取模式选择（兼容老方法 / API 极速新方法 + 自定义每页条数） -->
+            <!-- 抓取模式选择：默认 🔨 兼容模式 -->
             <div class="form-row">
                 <div class="form-item" style="flex:2;">
-                    <label>抓取模式（仅基本信息生效）</label>
-                    <select id="basic-fetchMode" title="极速模式=API直取JSON绕过31页截断；兼容模式=老方法DOM翻页">
-                        <option value="api" selected>🚀 极速模式（API 直取，绕过第31页重复截断）✅推荐</option>
-                        <option value="dom">🔨 兼容模式（老方法 DOM 翻页，第31页后会重复）</option>
+                    <label>抓取模式</label>
+                    <select id="basic-fetchMode" title="2种模式按场景选择">
+                        <option value="dom" selected>🔨 兼容模式（DOM翻页，支持页面筛选，自由指定页码）</option>
+                        <option value="api">🚀 极速模式（API直取，自动识别页面筛选条件，无验证码或仅1次验证码）</option>
                     </select>
                 </div>
-                <div class="form-item">
-                    <label>每页条数（极速模式）</label>
-                    <input type="number" id="basic-apiPageSize" value="100" min="10" max="500" step="10" title="数值越大页数越少，建议 50~200">
+                <div class="form-item" data-rapid-only="basic">
+                    <label>提取数据总条数（仅极速模式）</label>
+                    <input type="number" id="basic-apiPageSize" value="100" min="1" step="1" title="填写本次需要抓取的总数据条数，相当于 endPage × 每页条数（最小可填1条）">
                 </div>
+            </div>
+            <div class="hint">
+                <b>🔨 兼容模式（默认）：</b>模拟用户手动翻页，保留页面筛选条件，可自由指定起始/结束页码，适合需要精准筛选、数据量 ≤ 300 条的场景。<br>
+                <b>🚀 极速模式：</b>直接请求后端 API，固定从第 1 条开始。<br>
+                &nbsp;&nbsp;• <b>不论有没有筛选条件</b>：服务器最多只能返回前 300 条真实数据（第 301 条起全部重复，插件已自动限制到前 300 条）。
             </div>
             <div class="button-row">
                 <button class="btn btn-primary" id="basic-extract">🔍 开始提取</button>
+                <button class="btn btn-fetch-all" id="basic-extractAll" style="display:none;" title="仅极速模式可用：服务器从第 301 条起返回重复数据，自动获取前 300 条真实数据">📥 获取全部数据</button>
                 <button class="btn btn-danger" id="basic-stop" style="display:none;">⏹ 停止</button>
                 <button class="btn btn-default" id="basic-preview">📋 预览数据</button>
                 <button class="btn btn-success" id="basic-export">💾 导出CSV（完整）</button>
-                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
                 <button class="btn btn-secondary" id="basic-exportList">💾 仅导出列表CSV</button>
                 <button class="btn btn-danger" id="basic-clear">🗑 清空数据</button>
             </div>
@@ -175,8 +187,8 @@
                 <div class="form-item"><label>结束日期</label><input type="date" id="permit-endDate"></div>
                 <div class="form-item"><label>所在城市</label><input type="text" id="permit-city" placeholder="支持模糊查询"></div>
             </div>
-            <!-- 🔴✅ 需求3：查询范围选择 + 页码 -->
-            <div class="form-row">
+            <!-- 🔴 查询范围 + 页码：仅兼容模式显示 -->
+            <div class="form-row row-hide-in-rapid" data-type-row="permit">
                 <div class="form-item">
                     <label>查询范围</label>
                     <select id="permit-pageMode">
@@ -188,12 +200,33 @@
                 <div class="form-item"><label>起始页码</label><input type="number" id="permit-startPage" value="1" min="1"></div>
                 <div class="form-item"><label>结束页码</label><input type="number" id="permit-endPage" value="1" min="1"></div>
             </div>
+            <!-- 抓取模式选择：默认 🔨 兼容模式 -->
+            <div class="form-row">
+                <div class="form-item" style="flex:2;">
+                    <label>抓取模式</label>
+                    <select id="permit-fetchMode" title="2种模式按场景选择">
+                        <option value="dom" selected>🔨 兼容模式（DOM翻页，支持页面筛选，自由指定页码）</option>
+                        <option value="api">🚀 极速模式（API直取，自动识别页面筛选条件，无验证码或仅1次验证码）</option>
+                    </select>
+                </div>
+                <div class="form-item" data-rapid-only="permit">
+                    <label>提取数据总条数（仅极速模式）</label>
+                    <input type="number" id="permit-apiPageSize" value="100" min="1" step="1" title="填写本次需要抓取的总数据条数，相当于 endPage × 每页条数（最小可填1条）">
+                </div>
+            </div>
+            <div class="hint">
+                <b>🔨 兼容模式（默认）：</b>模拟用户手动翻页，保留页面筛选条件，可自由指定起始/结束页码，适合需要精准筛选、数据量 ≤ 300 条的场景。<br>
+                <b>🚀 极速模式：</b>直接请求后端 API，固定从第 1 条开始。<br>
+                &nbsp;&nbsp;• <b>不论有没有筛选条件</b>：服务器最多只能返回前 300 条真实数据（第 301 条起全部重复，插件已自动限制到前 300 条）。<br>
+                &nbsp;&nbsp;• <b>分段抓取建议</b>：用「开始日期/结束日期」按月/季度分段 + 所在城市，保证每段 ≤ 300 条，再配合「🔗 提取合并表」一次性拿到「基本信息 + 施工许可」1:N 合并结果。
+            </div>
             <div class="button-row">
                 <button class="btn btn-primary" id="permit-extract">🔍 开始提取</button>
+                <button class="btn btn-fetch-all" id="permit-extractAll" style="display:none;" title="仅极速模式可用：服务器从第 301 条起返回重复数据，自动获取前 300 条真实数据">📥 获取全部数据</button>
+                <button class="btn btn-permit-basic-merge" id="permit-extractMerge" style="display:none;" title="两种模式都可用：极速模式一次性API抓取+反查合并；兼容模式先点「开始提取」抓permit单表后再次点本按钮，按省级项目编号反查基本信息生成 1:N 合并表（字段规则与合并Tab一致）">🔗 提取合并表</button>
                 <button class="btn btn-danger" id="permit-stop" style="display:none;">⏹ 停止</button>
                 <button class="btn btn-default" id="permit-preview">📋 预览数据</button>
                 <button class="btn btn-success" id="permit-export">💾 导出CSV（完整）</button>
-                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
                 <button class="btn btn-secondary" id="permit-exportList">💾 仅导出列表CSV</button>
                 <button class="btn btn-danger" id="permit-clear">🗑 清空数据</button>
             </div>
@@ -218,8 +251,8 @@
                 <div class="form-item"><label>竣工验收备案机关</label><input type="text" id="complete-authority" placeholder="支持模糊查询"></div>
                 <div class="form-item"><label>竣工验收备案编号</label><input type="text" id="complete-recordNo" placeholder="支持模糊查询"></div>
             </div>
-            <!-- 🔴✅ 需求3：查询范围选择 + 页码 -->
-            <div class="form-row">
+            <!-- 🔴 查询范围 + 页码：仅兼容模式显示 -->
+            <div class="form-row row-hide-in-rapid" data-type-row="complete">
                 <div class="form-item">
                     <label>查询范围</label>
                     <select id="complete-pageMode">
@@ -231,12 +264,31 @@
                 <div class="form-item"><label>起始页码</label><input type="number" id="complete-startPage" value="1" min="1"></div>
                 <div class="form-item"><label>结束页码</label><input type="number" id="complete-endPage" value="1" min="1"></div>
             </div>
+            <!-- 抓取模式选择：默认 🔨 兼容模式 -->
+            <div class="form-row">
+                <div class="form-item" style="flex:2;">
+                    <label>抓取模式</label>
+                    <select id="complete-fetchMode" title="2种模式按场景选择">
+                        <option value="dom" selected>🔨 兼容模式（DOM翻页，支持页面筛选，自由指定页码）</option>
+                        <option value="api">🚀 极速模式（API直取，自动识别页面筛选条件，无验证码或仅1次验证码）</option>
+                    </select>
+                </div>
+                <div class="form-item" data-rapid-only="complete">
+                    <label>提取数据总条数（仅极速模式）</label>
+                    <input type="number" id="complete-apiPageSize" value="100" min="1" step="1" title="填写本次需要抓取的总数据条数，相当于 endPage × 每页条数（最小可填1条）">
+                </div>
+            </div>
+            <div class="hint">
+                <b>🔨 兼容模式（默认）：</b>模拟用户手动翻页，保留页面筛选条件，可自由指定起始/结束页码，适合需要精准筛选、数据量 ≤ 300 条的场景。<br>
+                <b>🚀 极速模式：</b>直接请求后端 API，固定从第 1 条开始。<br>
+                &nbsp;&nbsp;• <b>不论有没有筛选条件</b>：服务器最多只能返回前 300 条真实数据（第 301 条起全部重复，插件已自动限制到前 300 条）。
+            </div>
             <div class="button-row">
                 <button class="btn btn-primary" id="complete-extract">🔍 开始提取</button>
+                <button class="btn btn-fetch-all" id="complete-extractAll" style="display:none;" title="仅极速模式可用：服务器从第 301 条起返回重复数据，自动获取前 300 条真实数据">📥 获取全部数据</button>
                 <button class="btn btn-danger" id="complete-stop" style="display:none;">⏹ 停止</button>
                 <button class="btn btn-default" id="complete-preview">📋 预览数据</button>
                 <button class="btn btn-success" id="complete-export">💾 导出CSV（完整）</button>
-                <!-- 🔴✅ 需求2：仅导出列表数据按钮 -->
                 <button class="btn btn-secondary" id="complete-exportList">💾 仅导出列表CSV</button>
                 <button class="btn btn-danger" id="complete-clear">🗑 清空数据</button>
             </div>
@@ -247,77 +299,149 @@
 
         <!-- 合并导出 -->
         <div class="tab-content" id="tab-merge">
-            <div class="hint">💡 以省级项目编号关联基本信息与其他两表（一对多），以工程名称关联施工许可与竣工验收备案（一对一）。<br>📤 支持「提取数据」与「上传CSV」混合合并，优先同名表内去重；上传主表后将以主表为基准合并并生成变更备注。</div>
+            <div class="hint">💡 合并规则：基本信息 × 施工许可（省级项目编号 1:N）× 竣工验收备案（工程名称 1:1）。支持「主表基准合并」：上传一份主表（任意列，含外键即可），以主表行为基准逐行匹配三表信息并保留主表所有自定义列（含天眼查补全的社会信用代码/电话/法人等后缀列）。<br>
+            ✨ 「多表上传」支持 <b>一次拖/选多个 CSV</b>，会按表头字段自动识别每张表属于什么类型（基本/施工许可/竣工/基本+施工融合表/天眼查补全表），识别失败会给出具体原因（字段名不匹配/关键字段缺失/列数异常等），不会静默兜底。</div>
 
-            <!-- 🔴✅ 新功能1：三类型 CSV 分别上传 + 每个类型支持单独删除上传 -->
-            <div class="form-row" style="margin-bottom:16px;">
-                <div class="form-item">
-                    <label>上传基本信息CSV</label>
-                    <div class="upload-area" style="padding:12px;" data-upload="basic">
-                        <span style="font-size:12px;">📁 点击选择基本信息CSV文件</span>
-                        <input type="file" accept=".csv" data-file="basic">
+            <div class="form-row">
+                <div class="form-item" style="flex:1.3;">
+                    <label>📌 主表（上传一份，合并时以此为基准；可空）</label>
+                    <div class="upload-area" id="merge-upload-master" style="min-height:62px;">
+                        <span style="opacity:0.75;">📂 点击或拖拽 CSV 文件到此（作为主表 · 可空）</span>
+                        <input type="file" id="merge-master-file" accept=".csv,text/csv" style="display:none;">
                     </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
-                        <div class="upload-info" id="merge-upload-info-basic" style="font-size:11px;">尚未上传</div>
-                        <button class="btn btn-xs btn-danger" data-clear-upload="basic" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
-                    </div>
+                    <div id="merge-master-info" style="margin-top:6px;font-size:12px;"></div>
                 </div>
-                <div class="form-item">
-                    <label>上传施工许可CSV</label>
-                    <div class="upload-area" style="padding:12px;" data-upload="permit">
-                        <span style="font-size:12px;">📁 点击选择施工许可CSV文件</span>
-                        <input type="file" accept=".csv" data-file="permit">
+                <div class="form-item" style="flex:2;">
+                    <label>📚 批量上传三表（可多选）
+                        <button type="button" id="merge-batch-selAll" class="btn btn-default" style="margin-left:8px;padding:2px 8px;font-size:12px;height:auto;border-radius:4px;">全选</button>
+                        <button type="button" id="merge-batch-delSel" class="btn btn-danger" style="margin-left:6px;padding:2px 8px;font-size:12px;height:auto;border-radius:4px;">删除选中</button>
+                    </label>
+                    <div class="upload-area" id="merge-upload-multi" style="min-height:62px;">
+                        <span style="opacity:0.75;">📂 点击或拖拽 N 个 CSV 文件到此 → 自动按字段识别表类型</span>
+                        <input type="file" id="merge-multi-file" accept=".csv,text/csv" multiple style="display:none;">
                     </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
-                        <div class="upload-info" id="merge-upload-info-permit" style="font-size:11px;">尚未上传</div>
-                        <button class="btn btn-xs btn-danger" data-clear-upload="permit" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
-                    </div>
-                </div>
-                <div class="form-item">
-                    <label>上传竣工验收备案CSV</label>
-                    <div class="upload-area" style="padding:12px;" data-upload="complete">
-                        <span style="font-size:12px;">📁 点击选择竣工验收备案CSV文件</span>
-                        <input type="file" accept=".csv" data-file="complete">
-                    </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
-                        <div class="upload-info" id="merge-upload-info-complete" style="font-size:11px;">尚未上传</div>
-                        <button class="btn btn-xs btn-danger" data-clear-upload="complete" style="padding:2px 8px; font-size:11px; height:22px; line-height:18px;">🗑 删上传</button>
-                    </div>
+                    <div id="merge-batch-list" style="margin-top:6px;font-size:12px;max-height:160px;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:4px;"></div>
                 </div>
             </div>
 
-            <!-- 🔴✅ 新功能3：主表上传 / 删除 -->
-            <div class="form-row" style="margin-bottom:16px;">
-                <div class="form-item" style="flex: 1 1 100%;">
-                    <label>📋 上传主表（可选，合并时以主表为基准 + 自动生成变更备注）</label>
-                    <div class="upload-area" style="padding:14px;" data-upload="master">
-                        <span style="font-size:13px;">⭐ 点击选择主表CSV文件（支持任意表，建议使用之前导出的合并表）</span>
-                        <input type="file" accept=".csv" data-file="master">
+            <div class="form-row" style="align-items:flex-end;">
+                <div class="form-item" style="flex:2.2;">
+                    <label>✅ 参与合并的数据源（勾选=合并，不勾=不加入）
+                        <button type="button" id="merge-selAllNone" class="btn btn-default" style="margin-left:8px; padding:2px 8px; font-size:12px; height:auto; border-radius:4px;">全选 / 全不选</button>
+                    </label>
+                    <div id="merge-source-checkboxes" style="margin-top:6px; display:flex; gap:14px; flex-wrap:wrap;">
+                        <label style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px;">
+                            <input type="checkbox" id="merge-src-basic" data-src="basic" checked>
+                            基本信息（<span id="merge-src-basic-cnt" style="color:#1677ff;">0</span>）
+                        </label>
+                        <label style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px;">
+                            <input type="checkbox" id="merge-src-permit" data-src="permit" checked>
+                            施工许可（<span id="merge-src-permit-cnt" style="color:#1677ff;">0</span>）
+                        </label>
+                        <label style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px;">
+                            <input type="checkbox" id="merge-src-complete" data-src="complete" checked>
+                            竣工验收备案（<span id="merge-src-complete-cnt" style="color:#1677ff;">0</span>）
+                        </label>
+                        <label style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px;">
+                            <input type="checkbox" id="merge-src-tyc" data-src="tyc" checked>
+                            天眼查补全（<span id="merge-src-tyc-cnt" style="color:#1677ff;">0</span>）
+                        </label>
                     </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
-                        <div class="upload-info" id="merge-upload-info-master" style="font-size:12px;">尚未上传主表（未上传则按原有逻辑融合）</div>
-                        <button class="btn btn-xs btn-danger" id="merge-clear-master" style="padding:2px 10px; font-size:11px; height:24px; line-height:20px;">🗑 删除主表</button>
-                    </div>
+                </div>
+                <div class="form-item">
+                    <label>🎯 匹配不到的主表行</label>
+                    <select id="merge-keep-unmatched-master" title="若某主表行在三表里没找到匹配，是否仍然保留该行（空填三表字段）">
+                        <option value="1" selected>保留（推荐，避免漏行）</option>
+                        <option value="0">丢弃</option>
+                    </select>
+                </div>
+                <div class="form-item" style="flex:1;">
+                    <button class="btn btn-primary" id="merge-generate" style="width:100%;">🔗 生成合并表</button>
+                </div>
+                <div class="form-item" style="flex:1;">
+                    <button class="btn btn-success" id="merge-export" style="width:100%;">💾 导出合并CSV</button>
                 </div>
             </div>
 
-            <!-- 🔴✅ 新功能：数据来源分开显示（提取+上传） -->
-            <div class="stats" style="margin:0 0 12px 0; padding:8px 12px;">
-                <div class="stat-item"><div class="stat-label">基本信息(提取/上传)</div><div class="stat-value" id="merge-stats-basic">0 / 0</div></div>
-                <div class="stat-item"><div class="stat-label">施工许可(提取/上传)</div><div class="stat-value" id="merge-stats-permit">0 / 0</div></div>
-                <div class="stat-item"><div class="stat-label">竣工验收(提取/上传)</div><div class="stat-value" id="merge-stats-complete">0 / 0</div></div>
-                <div class="stat-item"><div class="stat-label">主表</div><div class="stat-value" id="merge-stats-master">0</div></div>
-                <div class="stat-item"><div class="stat-label">合并后(条)</div><div class="stat-value" id="merge-stats-merge">0</div></div>
+            <div class="status" id="merge-status" style="max-height:120px;overflow:auto;"></div>
+            <div id="merge-errors" style="display:none;margin-top:6px;padding:10px 12px;border:1px solid #f5c2c2;background:#fff5f5;border-radius:6px;color:#c0392b;font-size:12px;line-height:1.6;max-height:220px;overflow:auto;"></div>
+            <div class="table-wrapper" id="merge-table" style="display:none; max-height: 420px;"></div>
+        </div>
+
+        <!-- 天眼查补全 -->
+        <div class="tab-content" id="tab-tianyancha">
+            <div class="hint">💡 通过天眼查查询单位信息，并把「社会信用代码 / 电话 / 法人 / 地址 / 成立日期」5 个字段以「建设单位_ / 勘察单位_ / 设计单位_ / 施工单位_ / 监理单位_」前缀追加到对应单位字段后面。<br>
+            ✅ 支持补全：基本信息（建设单位）· 施工许可（建设/勘察/设计/施工/监理）· 竣工验收备案（接口预占，暂不补）· 合并导出（仅施工许可5类单位）<br>
+            ✨ 支持多公司：建设单位字段形如「公司A,公司B,公司C（委托建设）」时，可切换「只取第1家 / 全部查询并按「公司A：xxx，公司B：xxx」拼接」<br>
+            ⏱️ 每次查询随机等待 3~5 秒（随机延迟避免风控），请先确保已有打开且已登录的天眼查 pro.tianyancha.com 标签页。</div>
+            <div class="form-row">
+                <div class="form-item" style="flex:2;">
+                    <label>补全目标</label>
+                    <select id="tyc-target" title="选择补全哪个数据表">
+                        <option value="basic">基本信息（仅补「建设单位」→ 前缀 建设单位_）</option>
+                        <option value="permit" selected>施工许可（补「建设单位/工程总承包单位/勘察/设计/施工/监理」6 类单位）</option>
+                        <option value="complete">竣工验收备案（接口预占，暂不补全字段，可扩充）</option>
+                        <option value="merge">合并导出（仅补施工许可侧的 6 类单位 → 前缀 建设单位_/工程总承包单位_ 等）</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label>最小间隔(秒)</label>
+                    <input type="number" id="tyc-minDelay" value="3" min="1" max="30" step="1" title="每次查询前的最小等待秒数">
+                </div>
+                <div class="form-item">
+                    <label>最大间隔(秒)</label>
+                    <input type="number" id="tyc-maxDelay" value="5" min="1" max="60" step="1" title="每次查询前的最大等待秒数">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-item">
+                    <label>匹配方式</label>
+                    <select id="tyc-matchMode" title="搜索公司命中多家时，如何选择正确的那一家">
+                        <option value="smart" selected>智能匹配（优先 100% 全名一致；否则首条；命中低于 70% 跳过）</option>
+                        <option value="first">始终取首条（suggest.json 第一条，最快速）</option>
+                        <option value="strict">严格全名（必须 100% 全名完全匹配，否则跳过不补）</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label>覆盖策略</label>
+                    <select id="tyc-overwrite" title="如果某个字段之前已填值，是否用天眼查新值覆盖">
+                        <option value="keep" selected>保留原值（仅补空字段，安全模式）</option>
+                        <option value="force">强制覆盖（全量覆盖成天眼查新值）</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label>仅补未命中的</label>
+                    <select id="tyc-skipCached" title="已在本地缓存命中过的单位，是否跳过（显著加速二次补全）">
+                        <option value="1" selected>是（自动跳过已成功查询过的单位）</option>
+                        <option value="0">否（强制重查所有单位）</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label>多公司（逗号分隔）处理</label>
+                    <select id="tyc-multiCompany" title="建设单位/施工单位等字段出现「公司A,公司B,公司C」时，如何补全">
+                        <option value="first" selected>只取第 1 家（速度快，不影响进度条总数）</option>
+                        <option value="all">全部查询并拼接「公司A：xxx，公司B：xxx」展示</option>
+                    </select>
+                </div>
+            </div>
+            <div class="stats" style="margin: 8px 0 10px 0; padding: 10px 12px;">
+                <div class="stat-item"><div class="stat-label">唯一待查单位(去重)</div><div class="stat-value" id="tyc-stat-want">0</div></div>
+                <div class="stat-item"><div class="stat-label">本地缓存命中</div><div class="stat-value" id="tyc-stat-cached">0</div></div>
+                <div class="stat-item"><div class="stat-label">天眼查已查询</div><div class="stat-value" id="tyc-stat-queried">0 / 0</div></div>
+                <div class="stat-item"><div class="stat-label">成功</div><div class="stat-value" id="tyc-stat-ok" style="color:#52c41a;">0</div></div>
+                <div class="stat-item"><div class="stat-label">失败/跳过</div><div class="stat-value" id="tyc-stat-fail" style="color:#ff4d4f;">0</div></div>
             </div>
             <div class="button-row">
-                <button class="btn btn-primary" id="merge-generate">🔗 生成合并表</button>
-                <button class="btn btn-success" id="merge-export">💾 导出合并CSV</button>
-                <button class="btn btn-warning" id="merge-clear-queried">🧹 清空查询数据</button>
-                <button class="btn btn-default" id="merge-clearUpload">♻️ 清空上传的三表</button>
-                <button class="btn btn-danger" id="merge-clear">🗑 清空全部</button>
+                <button class="btn btn-primary" id="tyc-start">🔍 开始天眼查补全</button>
+                <button class="btn btn-danger" id="tyc-stop" style="display:none;">⏹ 停止</button>
+                <button class="btn btn-secondary" id="tyc-preview">📋 预览补全结果</button>
+                <button class="btn btn-success" id="tyc-export">💾 导出补全后CSV</button>
+                <button class="btn btn-default" id="tyc-clearCache">♻️ 清空本地天眼查缓存</button>
+                <button class="btn btn-danger" id="tyc-revert">↩️ 撤销本次补全（回滚）</button>
             </div>
-            <div class="status" id="merge-status">请分别提取三类数据，或上传三类CSV文件，然后点击「生成合并表」...</div>
-            <div class="table-wrapper" id="merge-table" style="display:none; max-height: 420px;"></div>
+            <div class="progress-bar" id="tyc-progress" style="display:none;"><div class="progress-bar-fill"></div></div>
+            <div class="status" id="tyc-status">等待操作...（请先到对应 tab 提取或上传好目标数据，再切回本页点击开始补全）</div>
+            <div class="table-wrapper" id="tyc-table" style="display:none; max-height: 360px;"></div>
         </div>
 
         <!-- 去重上传 -->
@@ -350,6 +474,30 @@
     <datalist id="basic-code-list"></datalist>
     <datalist id="permit-code-list"></datalist>
     <datalist id="complete-code-list"></datalist>
+    <!-- Tab 切换硬编码兜底：不依赖 popup.js 是否成功加载，点击立即可切 -->
+    <script>
+    (function () {
+        function switchTab(tabEl, target) {
+            try {
+                var tabs = document.querySelectorAll('.tabs .tab');
+                for (var i = 0; i < tabs.length; i++) { tabs[i].classList.remove('active'); }
+                if (tabEl) try { tabEl.classList.add('active'); } catch (e1) {}
+                var contents = document.querySelectorAll('.tab-content');
+                for (var j = 0; j < contents.length; j++) { contents[j].classList.remove('active'); }
+                var content = document.getElementById('tab-' + target);
+                if (content) content.classList.add('active');
+            } catch (e) { console.error('[switchTab] 失败:', e); }
+        }
+        window.__switchTab = switchTab;
+        // 兜底：URL ?mode=sidebar / ?mode=window 也不影响 Tab（默认显示 basic）
+        try {
+            var urlParams = new URLSearchParams(window.location.search || '');
+            var t = (urlParams.get('tab') || '').trim();
+            if (t) {
+                var el = document.querySelector('.tabs .tab[data-tab="' + t + '"]');
+                switchTab(el, t);
+            }
+        } catch (e2) {}
+    })();
+    </script>
     <script src="popup.js"></script>
-</body>
-</html>

@@ -312,15 +312,49 @@
 
     // ---------- 工具：连续重复页检测（兜底防护） ----------
     var _apiLastPageFingerprint = '';
-    function _isApiPageDuplicate(curRows) {
+    var _apiSeenProjectCodes = {}; // 🔴 跨页全局：见过的 projectCode 集合
+    function _isApiPageDuplicate(curRows, options) {
+        var opt = options || {};
         if (!Array.isArray(curRows) || curRows.length === 0) return false;
         var fp = curRows.map(function (r) {
             return (r.projectCode || r.id || '') + '||' + (r.projectName || '');
         }).join('###');
         var dup = (fp === _apiLastPageFingerprint && fp !== '');
         _apiLastPageFingerprint = fp;
-        if (dup) console.warn('[basic-api] ⚠️ 本页与上一页 100% 重复，触发后端截断保护，停止翻页');
-        return dup;
+
+        // 🔴 跨页重叠检测：前 N 条中有多少条见过
+        var sawDupCount = 0;
+        // 🔴 skipOverlapCheck：极速模式 permit/complete 传 true，跳过此检测（防止误判）
+        if (!opt.skipOverlapCheck) {
+            var checkN = Math.min(5, curRows.length);
+            for (var i = 0; i < checkN; i++) {
+                var pc = (curRows[i] && (curRows[i].projectCode || curRows[i].constructionPermitCode || curRows[i].archiveCode || curRows[i].id)) || '';
+                if (pc && _apiSeenProjectCodes[pc]) sawDupCount++;
+            }
+        }
+        // 登记见过的唯一键（更健壮：多种主键候选，防止空值大量登记——但现在 pc 非空才登记所以OK）
+        for (var j = 0; j < curRows.length; j++) {
+            var key = (curRows[j] && (curRows[j].projectCode || curRows[j].constructionPermitCode || curRows[j].archiveCode || curRows[j].id)) || '';
+            if (key) _apiSeenProjectCodes[key] = true;
+        }
+
+        // 🔴 跨页重叠必须 ≥ 3 条才判重复（原来是 1 条！太容易误判）
+        //    精准模式下：有验证码时可能真的返回前一页；但极速模式下一般是 skipOverlapCheck=true
+        var sawDup = sawDupCount >= 3;
+        if (dup || sawDup) {
+            console.warn('[api-dup] ⚠️ 判定重复页：连续指纹dup=' + dup + ', 前5条见过数=' + sawDupCount + ' (阈值≥3), curRows.length=' + curRows.length);
+            return true;
+        }
+        if (opt.debug) {
+            console.log('[api-dup] ℹ️ 正常页：连续指纹不同，前5条重叠=' + sawDupCount + '/5, rows=' + curRows.length);
+        }
+        return false;
+    }
+
+    // 🔴 重置 API 检测状态（用户每轮新的抓取任务开始前调用）
+    function _resetApiDupState() {
+        _apiLastPageFingerprint = '';
+        _apiSeenProjectCodes = {};
     }
 
     // ---------- 工具：检查用户是否填了任何筛选条件 ----------
@@ -396,17 +430,22 @@
                     if (window.__PLUGIN_RESPONSE_STORE__.length > 10) window.__PLUGIN_RESPONSE_STORE__.shift();
                 } catch (e) {}
                 if (res.image) {
+                    var newHasKey = !!(res.kaptchaKey && res.kaptchaKey.length >= 8);
                     var newLast = { time: Date.now(), kaptchaKey: res.kaptchaKey || '', image: res.image, from: (res.layer || 'layer') + (res.url ? ('→' + String(res.url).substring(0, 120)) : '') };
                     var cur = window.__PLUGIN_CAPTCHA_LAST__;
-                    var newHasKey = !!(newLast.kaptchaKey && newLast.kaptchaKey.length >= 8);
                     var curHasKey = !!(cur && cur.kaptchaKey && cur.kaptchaKey.length >= 8);
+                    var imgChanged = !(cur && cur.image === newLast.image);
                     if (!cur || newHasKey) {
                         window.__PLUGIN_CAPTCHA_LAST__ = newLast;
                     } else if (!newHasKey && !curHasKey && newLast.time >= (cur.time || 0)) {
                         window.__PLUGIN_CAPTCHA_LAST__ = newLast;
                     }
-                    console.log('%c[captcha-hit] ✅ layer=' + res.layer + ' IMG.len=' + res.image.length + ' KEY.len=' + (res.kaptchaKey || '').length + (newHasKey ? ' ✅有Key' : ' ⚠️无Key'), 'background:' + (newHasKey ? '#52c41a' : '#faad14') + ';color:#fff;padding:1px 4px;border-radius:2px;');
-                    if (!res.kaptchaKey) console.warn('[captcha-hit] ⚠️ 有图没Key！建议点击验证码图片刷新（MAIN world hook 可能能捕获到 Key）');
+                    // 🔴 精简日志：只有「有Key」或者「图片真的变了」时才打印；DOM层重复的无Key图片静默
+                    if (newHasKey) {
+                        console.log('%c[captcha-hit] ✅ layer=' + res.layer + ' IMG.len=' + res.image.length + ' KEY.len=' + (res.kaptchaKey || '').length + ' ✅有Key', 'background:#52c41a;color:#fff;padding:1px 4px;border-radius:2px;');
+                    } else if (imgChanged && res.layer !== 'DOM') {
+                        console.log('%c[captcha-hit] ⚠️ layer=' + res.layer + ' IMG.len=' + res.image.length + ' 无Key（可点击验证码图片刷新获取Key）', 'background:#faad14;color:#fff;padding:1px 4px;border-radius:2px;');
+                    }
                 }
             }
             function _procJsonStr(text, layer, url) {
@@ -609,22 +648,13 @@
             }
         } catch (eR) {}
 
-        // Step 2: 连续点击 DOM 图片 2 次（Vue 用 click 事件触发刷新，我们确保它一定收到）
+        // Step 2: 点击 DOM 图片 1 次触发 Vue 内部真实刷新，全局 Hook 拦截响应
         try {
             var imgEl = document.querySelector('.search-module-wrap img.valid-img');
             if (imgEl) {
                 try {
                     imgEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                 } catch (eEvt1) { try { imgEl.click(); } catch (eClick1) {} }
-                setTimeout(function () {
-                    try {
-                        var imgEl2 = document.querySelector('.search-module-wrap img.valid-img');
-                        if (imgEl2) {
-                            try { imgEl2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })); }
-                            catch (eEvt2) { try { imgEl2.click(); } catch (eClick2) {} }
-                        }
-                    } catch (eI2) {}
-                }, 200);
             }
         } catch (eBigDom) { console.warn('[captcha-refresh] ❌ 无法点击 DOM 验证码图片:', eBigDom); }
 
@@ -766,353 +796,939 @@
         }
     }
 
-    // ---------- 核心：调用真实 API /api/openplatform/project/list ----------
-    //          🔴✅ 增强调试版：3 种发送策略自动轮换 + 每步详细日志
-    function fetchBasicListViaApiReal(pageNum, pageSize, filterParams, captchaInfo) {
-        var pn = Number(pageNum) || 1;
-        var ps = Number(pageSize) || 100;
-        var fp = filterParams || {};
-        var cp = captchaInfo || {};
-        var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1]
-            || window.location.origin
-            || 'https://skypt.gdcic.net';
-        var needCaptcha = hasAnyFilterCondition();
+    // ================================================================
+    // 🔴⚡ 极速模式·有筛选（原精准模式合并后：支持筛选条件 + 页面条数 + API直取 + 重复页提醒）
+    // ================================================================
 
-        // ========= 🔴 调试信息收集：把这一大块打印到 DevTools Console =========
-        var debugInfo = {
-            time: new Date().toISOString(),
-            pageNum: pn, pageSize: ps, needCaptcha: needCaptcha,
-            filterParams: JSON.parse(JSON.stringify(fp)),
-            captchaInput: {
-                code: cp.code || '(空)',
-                kaptchaKey: cp.kaptchaKey || '(空)',
-                keyLength: (cp.kaptchaKey || '').length
-            },
-            cookie: document.cookie ? document.cookie.substring(0, 300) + '...' : '(空cookie!)'
-        };
-        // 检查页面上有没有 Vue 实例里保存的验证码 key（兜底）
+    // 通用：从 DOM 拿当前选择的每页条数（10 / 20 / 30 / 40，找不到就 10）
+    function getDomPageSize() {
+        var ps = 10;
         try {
-            var vueRoot = document.querySelector('#app') || document.querySelector('[data-v-]') || document.body;
-            if (vueRoot && vueRoot.__vue__) {
-                try {
-                    var vueState = vueRoot.__vue__.$data || vueRoot.__vue__._data || {};
-                    var keyHints = [];
-                    for (var k in vueState) {
-                        if (/captcha|kaptcha|verif|key|code/i.test(k)) {
-                            var val = String(vueState[k] || '');
-                            if (val.length < 200) keyHints.push(k + '=' + val);
-                        }
-                    }
-                    if (keyHints.length > 0) debugInfo.vueCaptchaFields = keyHints;
-                } catch (eVueInner) {}
+            var selText = '';
+            var sel = document.querySelector('.ant-pagination-options-size-changer .ant-select-selection-selected-value, .ant-pagination-size-changer .ant-select-selection-selected-value');
+            if (sel) selText = (sel.getAttribute && sel.getAttribute('title')) || (sel.innerText || sel.textContent || '').trim();
+            if (!selText) {
+                var sel2 = document.querySelector('.ant-pagination-options-size-changer, .ant-pagination-size-changer');
+                if (sel2 && sel2.innerText) selText = (sel2.innerText || '').replace(/\s+/g, '');
             }
-        } catch (eVue) {}
+            var m = (selText || '').match(/(\d+)(条|\/|\/页|条\/页)?/);
+            if (m && m[1]) {
+                var n = parseInt(m[1]);
+                if ([10, 20, 30, 40, 50, 100].indexOf(n) !== -1) ps = n;
+            }
+        } catch (e) { console.warn('[getDomPageSize] 异常, 默认10:', e.message || e); }
+        return ps;
+    }
 
-        // 🔴 用户样本已实锤：后端真实接口参数名 = kaptchaKey（不是别的），且必须带！否则报「验证码已过期」
-        //     所以「needCaptcha=true 时」3 个策略都一定带上 kaptchaKey + kaptcha + flag=true
-        //     （3 个策略只是参数编码方式微调，避免因为后端做了奇怪的 URL decode 行为失败）
-        function buildQs(strategyIdx) {
-            var qsParts = [];
-            if (fp.projectName) qsParts.push('projectName=' + encodeURIComponent(fp.projectName));
-            if (fp.cityId)      qsParts.push('cityId=' + encodeURIComponent(fp.cityId));
-            if (fp.orgName)     qsParts.push('orgName=' + encodeURIComponent(fp.orgName));
-            if (fp.projectClassId) qsParts.push('projectClassId=' + encodeURIComponent(fp.projectClassId));
-            if (fp.projectCode) qsParts.push('projectCode=' + encodeURIComponent(fp.projectCode));
-            qsParts.push('pageNum=' + pn);
-            qsParts.push('pageSize=' + ps);
-            if (needCaptcha) {
-                if (!cp.kaptchaKey) {
-                    console.warn('[fetch-api] ⚠️⚠️⚠️ 有筛选条件但 kaptchaKey 为空！大概率后端报「验证码已过期」。cp=', cp);
-                }
-                if (strategyIdx === 0) {
-                    // 策略 0：全部 encodeURIComponent（最标准）
-                    if (cp.code)       qsParts.push('kaptcha=' + encodeURIComponent(cp.code));
-                    if (cp.kaptchaKey) qsParts.push('kaptchaKey=' + encodeURIComponent(cp.kaptchaKey));
-                    qsParts.push('flag=true');
-                } else if (strategyIdx === 1) {
-                    // 策略 1：kaptchaKey 不 encode（后端做严格字符串相等比较时，- _ 被 encode 反而匹配不上）
-                    if (cp.code)       qsParts.push('kaptcha=' + encodeURIComponent(cp.code));
-                    if (cp.kaptchaKey) qsParts.push('kaptchaKey=' + cp.kaptchaKey);
-                    qsParts.push('flag=true');
-                } else {
-                    // 策略 2：两个都不 encode（最宽松）
-                    if (cp.code)       qsParts.push('kaptcha=' + cp.code);
-                    if (cp.kaptchaKey) qsParts.push('kaptchaKey=' + cp.kaptchaKey);
-                    qsParts.push('flag=true');
-                }
-            } else {
-                qsParts.push('kaptchaKey=');
-                qsParts.push('flag=false');
+    // 精准模式：3 种类型的 「placeholder 关键字 → 后端参数名」 映射表
+    // （跟 extractPermitList / extractCompleteList 里 DOM 解析的 filters 字段名保持一致）
+    var SMART_FILTER_MAPS = {
+        basic: [
+            { ph: '项目名称',       qKey: 'projectName' },
+            { ph: '建设单位',       qKey: 'orgName' },
+            { ph: '省级项目编号',   qKey: 'projectCode' },
+            { ph: '所在城市',       qKey: 'cityId',     isSelect: true, altTextKey: 'cityText' },
+            { ph: '项目分类',       qKey: 'projectClassId', isSelect: true, altTextKey: 'projectClassText' }
+        ],
+        permit: [
+            { ph: '工程名称',           qKey: 'projectName' },
+            { ph: '省级项目编号',       qKey: 'projectCode' },
+            { ph: '施工许可证编号',     qKey: 'constructionPermitCode' },
+            { ph: '发证机关',           qKey: 'authorizeOrgName' },
+            { ph: '开始日期',           qKey: 'beginTime',  isDate: true },
+            { ph: '结束日期',           qKey: 'endTime',    isDate: true },
+            { ph: '所在城市',           qKey: 'cityCode',   isSelect: true, altTextKey: 'city' }
+        ],
+        complete: [
+            { ph: '工程名称',               qKey: 'projectName' },
+            { ph: '省级项目编号',           qKey: 'projectCode' },
+            { ph: '竣工验收备案机关',       qKey: 'archiveOrgName' },
+            { ph: '竣工验收备案编号',       qKey: 'provinceArchiveCode' }
+        ]
+    };
+
+    function _getApiEndpoint(type) {
+        if (type === 'basic')    return '/api/openplatform/project/list';
+        if (type === 'permit')   return '/api/openplatform/constructionPermit/list';
+        if (type === 'complete') return '/api/openplatform/projectAcceptanceArchive/list';
+        return null;
+    }
+
+    function _getCityIdMap() {
+        return { '广州市': '440100', '韶关市': '440200', '深圳市': '440300', '珠海市': '440400', '汕头市': '440500', '佛山市': '440600', '江门市': '440700', '湛江市': '440800', '茂名市': '440900', '肇庆市': '441200', '惠州市': '441300', '梅州市': '441400', '汕尾市': '441500', '河源市': '441600', '阳江市': '441700', '清远市': '441800', '东莞市': '441900', '中山市': '442000', '潮州市': '445100', '揭阳市': '445200', '云浮市': '445300' };
+    }
+
+    function collectSmartFilterParams(type) {
+        var params = {};
+        var cfg = SMART_FILTER_MAPS[type] || [];
+        if (cfg.length === 0) return params;
+        try {
+            var wrap = document.querySelector('.search-module-wrap');
+            if (!wrap) return params;
+
+            // 深度递归：从任意 DOM 元素的 __vue__ 上找 value / cityId / classId
+            function deepFindVueValue(dom, wantKeyPart) {
+                try {
+                    if (!dom) return null;
+                    var seen = new WeakSet();
+                    var stack = [];
+                    if (dom.__vue__) stack.push(dom.__vue__);
+                    while (stack.length > 0) {
+                        var obj = stack.pop();
+                        if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+                        seen.add(obj);
+                        var keys = Object.keys(obj);
+                        for (var k = 0; k < keys.length; k++) {
+                            var kk = keys[k];
+                            if (/^\$|^_/.test(kk) && kk !== '$data' && kk !== '_data') continue;
+                            var val = null;
+                            try { val = obj[kk]; } catch (eAcc) { continue; }
+                            if (val && typeof val === 'object') { stack.push(val); continue; }
+                            if (typeof val === 'string' && val && new RegExp(wantKeyPart, 'i').test(kk)) return val;
+                        }
+                        if (obj.$parent) stack.push(obj.$parent);
+                        if (obj.$children && Array.isArray(obj.$children)) for (var c = 0; c < obj.$children.length; c++) stack.push(obj.$children[c]);
+                    }
+                } catch (e) {}
+                return null;
             }
-            return qsParts.join('&');
+
+            // 先处理 input 文本框
+            var inputs = wrap.querySelectorAll('input.ant-input');
+            for (var i = 0; i < inputs.length; i++) {
+                var ph = (inputs[i].getAttribute && inputs[i].getAttribute('placeholder')) || '';
+                var v = (inputs[i].value || '').trim();
+                if (!ph) continue;
+                for (var j = 0; j < cfg.length; j++) {
+                    if (cfg[j].isSelect || cfg[j].isDate) continue;
+                    if (ph.indexOf(cfg[j].ph) !== -1) {
+                        params[cfg[j].qKey] = v;
+                        break;
+                    }
+                }
+            }
+
+            // 处理 input[type=date] 日期框（Vue 用的 ant-input 不一定是 date picker，再单独找 ant-calendar 相关的）
+            var dateInputs = wrap.querySelectorAll('input[type="date"], .ant-calendar-input, input[placeholder*="日期"]');
+            for (var di = 0; di < dateInputs.length; di++) {
+                var dph = (dateInputs[di].getAttribute && dateInputs[di].getAttribute('placeholder')) || '';
+                var dv = (dateInputs[di].value || '').trim();
+                if (!dv) continue;
+                for (var dj = 0; dj < cfg.length; dj++) {
+                    if (!cfg[dj].isDate) continue;
+                    if (dph.indexOf(cfg[dj].ph) !== -1 || (!dph && (dv.indexOf('-') !== -1 || /^\d{4}/.test(dv)))) {
+                        var d = dv.substring(0, 10);
+                        // 🔴 严格只按 SMART_FILTER_MAPS 里写的 qKey 填（permit 必须只填 beginTime/endTime，别多填 beginDate 等冗余参数 → 接口会直接返回 total=0）
+                        params[cfg[dj].qKey] = d;
+                        break;
+                    }
+                }
+            }
+
+            // 处理 select 下拉（所在城市、项目分类等）—— 跟 basic 原来的 collectFilterParamsFromDom 逻辑一致
+            var allSelects = wrap.querySelectorAll('.ant-select.select');
+            var selectIdx = 0;
+            for (var si = 0; si < cfg.length; si++) {
+                if (!cfg[si].isSelect) continue;
+                var selDom = allSelects[selectIdx++];
+                if (!selDom) continue;
+                try {
+                    var textEl = selDom.querySelector('.ant-select-selection-selected-value');
+                    var textVal = textEl ? ((textEl.getAttribute && textEl.getAttribute('title')) || (textEl.innerText || '').trim()) : '';
+                    var idVal = deepFindVueValue(selDom, 'city|class|value|id');
+                    if (!idVal && (cfg[si].qKey === 'cityId' || cfg[si].qKey === 'cityCode') && textVal) {
+                        var cityMap = _getCityIdMap();
+                        if (cityMap[textVal]) idVal = cityMap[textVal];
+                    }
+                    if (idVal && /^\d+$/.test(idVal)) {
+                        // 🔴 严格只填 SMART_FILTER_MAPS 里写的那一个城市数字字段
+                        //   permit 只认 cityCode（多了 cityId → 接口 total=0）
+                        //   basic 只认 cityId
+                        params[cfg[si].qKey] = idVal;
+                    }
+                    if (textVal && cfg[si].altTextKey) params[cfg[si].altTextKey] = textVal;
+                } catch (eSel) {}
+            }
+        } catch (e) { console.warn('[collectSmartFilterParams:' + type + '] 异常:', e.message || e); }
+        console.log('[smart-filter] ✅ type=' + type + ' 收集到 DOM 筛选参数:', params);
+        return params;
+    }
+
+    function _hasAnyFilter(fp) {
+        if (!fp) return false;
+        for (var k in fp) {
+            if (!fp.hasOwnProperty(k)) continue;
+            var v = fp[k];
+            if (typeof v === 'string' && v.trim() !== '') return true;
+            if (typeof v === 'number') return true;
+        }
+        return false;
+    }
+
+    function _buildFilterQueryString(fp) {
+        if (!fp) return '';
+        var parts = [];
+        for (var k in fp) {
+            if (!fp.hasOwnProperty(k)) continue;
+            var v = fp[k];
+            if (v === null || v === undefined || v === '') continue;
+            if (typeof v === 'string' && v.trim() === '') continue;
+            parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)));
+        }
+        return parts.length > 0 ? ('&' + parts.join('&')) : '';
+    }
+
+    // ---------- 极速模式·有筛选/无筛选：真正发送请求 + 验证码处理（重试3次，失败直接返回错误，不再回退 DOM） ----------
+    //   🔴 最新实测（用户确认）：服务器从第 301 条起，**无论有没有筛选条件**，都返回与第 1 页完全重复的数据
+    //      → 因此不再做任何拆分请求，pageSize 上限统一 = 300，超过就截断
+    //      → 极速模式 1 次请求（pageNum=1&pageSize=≤300）：有筛选时填 1 次验证码，无筛选不用验证码
+    function fetchListRapidFilteredApi(type, pageNum, pageSize, filterParams, outerDoneCallback, extraFlags) {
+        var endpoint = _getApiEndpoint(type);
+        if (!endpoint) { outerDoneCallback && outerDoneCallback({ success: false, error: '未知 type=' + type }); return; }
+        var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+        var basePath = window.location.pathname || '/openplatform/';
+        var hasFilter = _hasAnyFilter(filterParams);
+        var filterQs = hasFilter ? _buildFilterQueryString(filterParams) : '';
+        var retriesLeft = 3;
+        var pn = Number(pageNum) || 1;
+        var ps = Number(pageSize) || 10;
+        var captchaPromptShown = false;
+        function guardTry(caller) {
+            if (captchaPromptShown && retriesLeft < 2) {
+                console.warn('%c[rapid:' + type + '-guard] 🚫 已弹过验证码且已重试至少1次，不再重弹！失败直接回退DOM',
+                    'background:#faad14;color:#000;font-weight:bold;');
+                return false;
+            }
+            return true;
         }
 
-        function doRequest(url, postBody) {
+        function tryNow() {
+            if (!guardTry('tryNow')) { onFailRapid('验证码重试次数用完，直接回退 DOM'); return; }
+            var needCap = hasFilter;
+            var baseQs = '';
+            if (needCap) {
+                var typeName = { basic: '基本信息', permit: '施工许可', complete: '竣工验收' }[type] || type;
+                var filterDesc = _buildFilterDescRapid(filterParams);
+                var tipMsg = '【极速模式·有筛选】' + typeName + ' · 抓 ' + ps + ' 条\n筛选：' + filterDesc + '\n请输入 5 位验证码后点「确认开始抓取」';
+                var isTruncated = !!(extraFlags && extraFlags.truncated);
+                if (isTruncated) {
+                    var realT = extraFlags.realTotal || '?';
+                    var hLim = extraFlags.hardLimit || ps;
+                    tipMsg += '\n⚠️ 筛选后共 ' + realT + ' 条，但服务器第 ' + (hLim + 1) + ' 条起就和第 1 页数据重复（服务器分页机制，任何方式都无法绕过）';
+                    tipMsg += '\n🎯 本次只获取前 ' + hLim + ' 条真实数据，填完这 1 次验证码即可抓完';
+                    tipMsg += '\n💡 如需全部：清空筛选条件 → 极速模式抓全量 → Excel 本地筛选';
+                } else if (ps > 40) {
+                    tipMsg += '\n🎯 本次一共 ' + ps + ' 条，填完这 1 次验证码全部抓完！';
+                }
+                var retryCount = 3 - retriesLeft;
+                captchaPromptShown = true;
+                showCaptchaPrompt('', tipMsg, retryCount, function (capRes) {
+                    if (capRes && capRes.aborted) {
+                        outerDoneCallback && outerDoneCallback({ success: false, error: '用户中止', aborted: true });
+                        return;
+                    }
+                    if (capRes && (capRes.canceled || !capRes.code)) {
+                        console.warn('[rapid:' + type + '] 用户取消验证码 → 回退 DOM 方案');
+                        _fallbackDomRapid();
+                        return;
+                    }
+                    var capCode = capRes && capRes.code ? capRes.code.trim().toUpperCase() : '';
+                    var capKey = capRes && capRes.kaptchaKey ? capRes.kaptchaKey : '';
+                    baseQs = 'pageNum=' + pn + '&pageSize=' + ps + '&kaptcha=' + encodeURIComponent(capCode) + '&kaptchaKey=' + encodeURIComponent(capKey) + '&flag=true';
+                    sendReqRapid(baseQs + filterQs);
+                });
+            } else {
+                baseQs = 'pageNum=' + pn + '&pageSize=' + ps + '&kaptchaKey=&flag=false';
+                sendReqRapid(baseQs);
+            }
+        }
+
+        function _buildFilterDescRapid(fp) {
+            if (!fp) return '无';
+            var parts = [];
+            var map = {
+                projectName: '项目名', projectCode: '省编号', constructionPermitCode: '许可证号',
+                authorizeOrgName: '发证机关', archiveOrgName: '备案机关', provinceArchiveCode: '备案号',
+                orgName: '建设单位',
+                beginDate: '开始', endDate: '结束', beginTime: '开始', endTime: '结束',
+                cityText: '城市', city: '城市', cityCode: '城市', cityId: '城市', projectClassText: '分类'
+            };
+            for (var k in fp) {
+                if (!fp.hasOwnProperty(k)) continue;
+                var v = fp[k];
+                if (v === null || v === undefined || v === '' || (typeof v === 'string' && v.trim() === '')) continue;
+                var label = map[k] || k;
+                parts.push(label + '=' + (String(v).length > 10 ? String(v).slice(0, 8) + '…' : v));
+                if (parts.length >= 4) break;
+            }
+            return parts.length === 0 ? '无' : parts.join(', ');
+        }
+
+        function sendReqRapid(qs) {
+            var url = origin + endpoint + '?' + qs;
+            console.log('%c[rapid:' + type + '-api] 请求 page=' + pn + ', size=' + ps + (hasFilter ? ' [带筛选+验证码]' : ' [无筛选]') + ' → ' + url, 'color:#722ed1;font-weight:bold;');
             try {
                 var xhr = new XMLHttpRequest();
-                var method = postBody ? 'POST' : 'GET';
-                xhr.open(method, url, false); // 同步
+                xhr.open('GET', url, false);
                 xhr.withCredentials = true;
                 xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
                 xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                if (postBody) {
-                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                }
-                try { xhr.send(postBody || null); } catch (eSend) {
-                    return { success: false, error: '请求发送失败: ' + (eSend.message || eSend), rawUrl: url };
-                }
-                if (xhr.status !== 200) {
-                    return { success: false, error: 'HTTP ' + xhr.status, httpStatus: xhr.status, rawUrl: url, rawText: xhr.responseText && xhr.responseText.substring(0, 500) };
-                }
+                xhr.send(null);
+                if (xhr.status !== 200) { onFailRapid('HTTP ' + xhr.status); return; }
                 var text = xhr.responseText || '';
                 var json = {};
-                try { json = JSON.parse(text || '{}'); } catch (eP) {
-                    return { success: false, error: 'JSON解析失败: ' + text.substring(0, 200), rawUrl: url, rawText: text };
+                try { json = JSON.parse(text || '{}'); } catch (eP) { onFailRapid('JSON解析失败: ' + text.substring(0, 200)); return; }
+                var isCaptchaErr = (json.code === 500 && /验证码|已过期|kaptcha|无效|错误/i.test(json.msg || '')) ||
+                    ((json.code === 400 || json.code === 401 || json.code === 403) && /验证码|kaptcha/i.test(json.msg || ''));
+                if (isCaptchaErr) {
+                    if (retriesLeft > 0 && guardTry('sendReqRapid.isCaptchaErr')) {
+                        retriesLeft--;
+                        console.warn('[rapid:' + type + '-api] 验证码错误/过期（' + (json.msg || '') + '），重刷重试（剩余重试次数=' + retriesLeft + '）');
+                        setTimeout(tryNow, 300);
+                    } else {
+                        console.warn('[rapid:' + type + '-api] 验证码错误或重试保护触发 → 回退 DOM，不再弹验证码');
+                        onFailRapid('验证码连续错误: ' + (json.msg || ''));
+                    }
+                    return;
                 }
-                return { success: true, json: json, rawUrl: url, rawTextHead: text.substring(0, 200) };
+                if (json.code !== 0 && json.code !== 200) {
+                    console.warn('%c[rapid:' + type + '-api] ⚠️ 接口非验证码错误 code=' + json.code + ', msg=' + (json.msg || '') + ' → 整体回退 DOM 方案', 'background:#faad14;color:#000;font-weight:bold;');
+                    onFailRapid(json.msg || '接口错误 code=' + json.code); return;
+                }
+                var rows = [];
+                if (Array.isArray(json.rows)) rows = json.rows;
+                else if (json.data && Array.isArray(json.data.rows)) rows = json.data.rows;
+                else if (json.data && Array.isArray(json.data)) rows = json.data;
+                var total = parseInt(String(json.total || 0)) || 0;
+                if (!total && json.data && typeof json.data === 'object') {
+                    var dt = parseInt(String(json.data.total || 0)) || 0;
+                    if (dt) total = dt;
+                    else if (json.data.pageInfo) {
+                        var dpi = parseInt(String(json.data.pageInfo.total || 0)) || 0;
+                        if (dpi) total = dpi;
+                    }
+                }
+                // 🔴 服务器隐形 pageSize 上限保护：如果用户请求 pageSize>300，接口只返回 10 条
+                //    但我们在进入这里前已经通过 _calcFilteredLimit 把 requestSize 限制在了 ≤300
+                //    如果仍然出现 returned<ps*0.5，意味着筛选参数可能不被服务器识别，回退 DOM 并提示
+                var returned = rows.length;
+                if (hasFilter && ps > 40 && returned < 12 && returned < ps * 0.5) {
+                    console.warn('%c[rapid:' + type + '-api] ⚠️ 服务器实际返回条数异常！请求 pageSize=' + ps + '，实际只返回 ' + returned + ' 条 → 可能筛选参数名不正确，接口无法识别',
+                        'background:#ff4d4f;color:#fff;font-weight:bold;');
+                }
+                var duplicate = _isApiPageDuplicate(rows, extraFlags ? (extraFlags.dupOpts || {}) : {});
+                var mapper = _getRowMapper(type) || function (r) { return r; };
+                var mapped = rows.map(function (src) { return mapper(src, origin, basePath); });
+                var extraInfo = '';
+                if (extraFlags && extraFlags.truncated) extraInfo += ' [⚠️ 已截断，只返回前' + (extraFlags.hardLimit || 300) + '条，真实总数=' + (extraFlags.realTotal || '?') + ']';
+                if (duplicate) extraInfo += ' [⚠️ 本页与上一页重复]';
+                console.log('[rapid:' + type + '-api] ✅ page=' + pn + ' rows=' + mapped.length + ', total=' + total + extraInfo);
+                _finalizeSuccessResponse(mapped, total, duplicate);
             } catch (e) {
-                return { success: false, error: e.message || String(e), rawUrl: url };
+                console.error('%c[rapid:' + type + '-api] ❌ 请求异常：' + (e.message || String(e)) + ' → 回退DOM',
+                    'background:#ff4d4f;color:#fff;font-weight:bold;');
+                onFailRapid(e.message || String(e));
             }
         }
 
-        function isCaptchaErr(res) {
-            if (!res || !res.json) return false;
-            var j = res.json;
-            if ((j.code !== 0 && j.code !== 200) && /验证码|captcha|kaptcha|过期|无效|错误/i.test(String(j.msg || ''))) return true;
-            return false;
-        }
-
-        // ========== 3 种策略自动轮换（只在 needCaptcha 时才轮询策略，避免无验证码时出问题） ==========
-        var strategies = needCaptcha ? [0, 1, 2] : [0];
-        var lastRes = null;
-        var strategyTried = [];
-        for (var si = 0; si < strategies.length; si++) {
-            var s = strategies[si];
-            var qs = buildQs(s);
-            var url = origin + '/api/openplatform/project/list?' + qs;
-            // 打印（URL 里的 code 打码，避免泄露）
-            var displayUrl = url.replace(/kaptcha=[^&]+/g, 'kaptcha=***');
-            console.log('%c[basic-api-DEBUG] 策略' + s + ' 请求: ' + displayUrl, 'color:#1890ff;font-weight:bold;');
-            strategyTried.push('策略' + s);
-            var res = doRequest(url, null);
-            debugInfo['strategy' + s] = {
-                url: displayUrl,
-                httpOk: !!res.success,
-                jsonCode: res.json ? (res.json.code || 'n/a') : 'n/a',
-                jsonMsg: res.json ? (res.json.msg || '') : (res.error || ''),
-                rowsCount: res.json && res.json.rows ? res.json.rows.length : 0
+        function _finalizeSuccessResponse(finalMapped, total, duplicate) {
+            var finalData = Array.isArray(finalMapped) ? finalMapped : [];
+            var finTotal = Math.max(0, Number(total) || 0);
+            var resp = {
+                success: true,
+                via: 'api',
+                data: finalData,
+                total: finTotal,
+                totalPages: 1,
+                pageSize: ps,
+                duplicate: !!duplicate,
+                needCaptcha: hasFilter,
+                filterParams: filterParams || {},
+                aborted: false,
+                hasFilter: hasFilter
             };
-            if (res.success && !isCaptchaErr(res)) {
-                lastRes = res;
-                break; // ✅ 成功了
+            if (extraFlags) {
+                if (extraFlags.truncated === true) resp.truncated = true;
+                if (extraFlags.beyondLimit === true) resp.beyondLimit = true;
+                if (extraFlags.filteredLimitReached === true) resp.filteredLimitReached = true;
+                if (typeof extraFlags.realTotal === 'number') resp.realTotal = extraFlags.realTotal;
+                if (typeof extraFlags.hardLimit === 'number') resp.hardLimit = extraFlags.hardLimit;
+                if (extraFlags.filteredLimitMsg) resp.filteredLimitMsg = extraFlags.filteredLimitMsg;
             }
-            lastRes = res;
-            if (si < strategies.length - 1) {
-                console.warn('[basic-api-DEBUG] 策略' + s + ' 失败: ' + (res.json && res.json.msg || res.error || '未知') + ' → 自动尝试下一个策略');
+            outerDoneCallback && outerDoneCallback(resp);
+        }
+
+        function onFailRapid(err) {
+            console.error('%c[rapid:' + type + '-api] ❌ API 方案失败: ' + err + '（⚠️ 已禁用 DOM 回退，直接返回错误给用户）',
+                'background:#ff4d4f;color:#fff;font-weight:bold;');
+            try {
+                var W = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : {});
+                W.__SJKFPT_LAST_API_FAIL_REASON__ = '[rapid:' + type + '-api] ' + (err || '未知错误');
+            } catch (e) {}
+            // 🔴 用户明确要求：做不到就做不到，不要回退 DOM（那只会偷偷拿到当前页10条，误导判断以为成功了）
+            outerDoneCallback && outerDoneCallback({
+                success: false,
+                error: (err || '未知错误'),
+                via: 'api-fail',
+                _noFallback: true,
+                data: [],
+                total: 0
+            });
+        }
+
+        function _fallbackDomRapid() {
+            // 🔴 完全禁用 DOM 回退：onFailRapid 直接返回错误，不再偷偷读当前页 10 条 DOM 数据
+            onFailRapid('_fallbackDomRapid 已禁用，请根据控制台报错排查极速模式 API 问题');
+        }
+
+        tryNow();
+    }
+
+    // 🔴 旧 fetchListRapidFiltered（逐页请求遗留函数）已彻底删除！逻辑已合并到 fetchListRapid 顶层入口统一一次性拉完
+
+    // 缺少 basic 的映射函数（之前可能没公开）—— 补齐 _mapBasicRowFromApi（极速模式共用）
+    function _mapBasicRowFromApi(src, origin, basePath) {
+        var code = String(src.projectCode || '');
+        var name = String(src.projectName || '');
+        // 🔴 buildUnit 是数组 [{orgName:"xxx", orgTypeId:1, orgCode:"xxx"}, ...]，不能直接 String()
+        var buildUnitNames = [];
+        var buildUnitArr = src.buildUnit;
+        if (Array.isArray(buildUnitArr) && buildUnitArr.length > 0) {
+            for (var bu = 0; bu < buildUnitArr.length; bu++) {
+                var buItem = buildUnitArr[bu];
+                if (buItem && buItem.orgName) buildUnitNames.push(String(buItem.orgName));
             }
         }
-
-        // 🔴 把完整调试信息输出到 console（复制给我用！）
-        debugInfo.triedStrategies = strategyTried;
-        debugInfo.chosenUrl = lastRes ? lastRes.rawUrl : '';
-        console.groupCollapsed('%c[basic-api-DEBUG] 🐞 完整调试信息（复制这块发作者！）', 'background:#ff4d4f;color:#fff;padding:2px 8px;border-radius:4px;');
-        console.log('debugInfo =', debugInfo);
-        if (lastRes) {
-            console.log('最后一次响应 JSON =', lastRes.json || null);
-            console.log('最后一次响应 rawText.head =', lastRes.rawTextHead || '');
+        var buildUnit = buildUnitNames.length > 0 ? buildUnitNames.join('、') : String(src.constructOrgName || '');
+        var city = String(src.city || src.cityText || '');
+        var row = {
+            '项目名称': name,
+            '省级项目编号': code,
+            // ✅ 列表级：只有 city 文本，没有省/区 → 写入标准列「所在市」
+            '所在市': city,
+            // ✅ 项目所在地：详情接口抓取后回填（省+市+区 拼接），列表阶段留空
+            '项目所在地': '',
+            '项目分类': src.projectClass || src.projectClassName || src.projectClassText || '',
+            '建设单位': buildUnit,
+            // 🔴 保留原 fetchBasicListViaApiReal 里供详情提取用的内部字段（详情查询可能依赖 _apiId）
+            '_apiProjectClassId': src.projectClassId || '',
+            '_apiCityId': src.cityId || '',
+            '_apiDataLevel': src.dataLevel || '',
+            '_apiId': src.id || ''
+        };
+        if (src.dataLevel) row['数据等级'] = _stringifyDataLevel(src.dataLevel);
+        // 🔴 详情 URL：必须跟原来 fetchBasicListViaApiReal 完全一致 /openplatform/#/web/project/detail?projectCode=xxx
+        //    错误格式（/web/projectDetail）会导致详情匹配失败 → 触发仿真点击弹新窗口 → 卡死
+        if (code) {
+            row.detailUrl = origin + '/openplatform/#/web/project/detail?projectCode=' + encodeURIComponent(code);
         }
-        console.groupEnd();
+        return row;
+    }
 
-        // 解析最终结果
-        if (!lastRes || !lastRes.success) {
-            return { success: false, error: (lastRes && lastRes.error) || '所有策略失败', rawUrl: lastRes && lastRes.rawUrl, debugInfo: debugInfo };
-        }
-        var json = lastRes.json || {};
-        // 验证码校验失败（所有策略都试过了还是失败）
-        if (isCaptchaErr(lastRes)) {
-            console.warn('[basic-api] ❌ 所有策略验证码均失败:', json.msg, '（请复制上面 [basic-api-DEBUG] 完整调试信息给作者！）');
-            return { success: false, error: json.msg || '验证码错误/过期', captchaFailed: true, rawJson: json, debugInfo: debugInfo };
-        }
-        var rows = [];
-        if (Array.isArray(json.rows)) rows = json.rows;
-        else if (json.data && Array.isArray(json.data.rows)) rows = json.data.rows;
-        else if (json.data && Array.isArray(json.data)) rows = json.data;
-        var total = parseInt(String(json.total || 0)) || 0;
-        var respPageNum = parseInt(String(json.pageNum || pn)) || pn;
+    // ---------- 核心：通用 3 种类型的真实 API 直取（无筛选/无验证码） ----------
+    function fetchListViaApiReal(type, pageNum, pageSize, dupOpts) {
+        var cfg = _getApiListConfig(type);
+        if (!cfg) return { success: false, error: '未知 type=' + type };
+        var pn = Number(pageNum) || 1;
+        var ps = Number(pageSize) || 100;
+        var dOpt = dupOpts || {};
+        var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+        var basePath = window.location.pathname || '/openplatform/';
+        var mapper = _getRowMapper(type);
+        if (!mapper) return { success: false, error: '无 mapper, type=' + type };
 
-        // 把后端 rows 映射成插件标准格式
-        var mapped = rows.map(function (src) {
-            var row = {
-                '项目名称': src.projectName || '',
-                '省级项目编号': src.projectCode || '',
-                '项目所在地': src.city || src.province || '',
-                '所在城市': src.city || '',
-                '项目分类': src.projectClass || '',
-                '_apiProjectClassId': src.projectClassId || '',
-                '_apiCityId': src.cityId || '',
-                '_apiDataLevel': src.dataLevel || '',
-                '_apiId': src.id || ''
+        var qs = 'pageNum=' + pn + '&pageSize=' + ps + '&kaptchaKey=&flag=false';
+        var url = origin + cfg.path + '?' + qs;
+        var tag = '[' + type + '-api]';
+        console.log('%c' + tag + ' 请求 page=' + pn + ', size=' + ps + ' → ' + url, 'color:#1890ff;font-weight:bold;');
+
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, false);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send(null);
+            if (xhr.status !== 200) return { success: false, error: 'HTTP ' + xhr.status };
+            var text = xhr.responseText || '';
+            var json = {};
+            try { json = JSON.parse(text || '{}'); } catch (eP) {
+                return { success: false, error: 'JSON解析失败: ' + text.substring(0, 200) };
+            }
+            if (json.code !== 0 && json.code !== 200) {
+                return { success: false, error: (json.msg || '接口返回错误 code=' + json.code) };
+            }
+            var rows = [];
+            if (Array.isArray(json.rows)) rows = json.rows;
+            else if (json.data && Array.isArray(json.data.rows)) rows = json.data.rows;
+            else if (json.data && Array.isArray(json.data)) rows = json.data;
+            var total = parseInt(String(json.total || 0)) || 0;
+            var respPageNum = parseInt(String(json.pageNum || pn)) || pn;
+
+            var mapped = rows.map(function (src) { return mapper(src, origin, basePath); });
+            // 🔴 duplicate 检测：如果调用方传了 dupOpts 就用调用方的；否则用 config 里的默认值
+            var skipOv = typeof dOpt.skipOverlapCheck === 'boolean' ? dOpt.skipOverlapCheck : !!cfg.skipOverlap;
+            var isDup = _isApiPageDuplicate(rows, { skipOverlapCheck: skipOv, debug: true });
+            console.log(tag + ' ✅ page=' + pn + ' 返回 rows=' + mapped.length + ', total=' + total + ', duplicate=' + isDup + ' (skipOverlap=' + skipOv + ')');
+            return {
+                success: true,
+                data: mapped,
+                rawRows: rows,
+                total: total,
+                pageNum: respPageNum,
+                pageSize: ps,
+                totalPages: total > 0 ? Math.ceil(total / ps) : 0,
+                duplicate: isDup
             };
-            var buildUnitArr = src.buildUnit;
-            var orgName = src.orgName || '';
-            if (Array.isArray(buildUnitArr) && buildUnitArr.length > 0) {
-                var names = [];
-                for (var bu = 0; bu < buildUnitArr.length; bu++) {
-                    if (buildUnitArr[bu] && buildUnitArr[bu].orgName) names.push(buildUnitArr[bu].orgName);
+        } catch (e) {
+            return { success: false, error: e.message || String(e) };
+        }
+    }
+
+    // ---------- 🔴✅ 极速模式【唯一顶层入口】（深度融合精准 + 一次性拉完，不再逐页弹验证码） ----------
+    //
+    //   🔴 核心设计（用户明确要求）：
+    //      因为极速模式已经固定「起始页=1」，所以用户选的 1-N 页 × 每页M条 = 总条数 N*M
+    //      → **直接 pageNum=1&pageSize=总条数**，一次请求完，填一次验证码（有筛选时）即可！
+    //      → 响应强制 totalPages=1，防止 popup 继续翻下一页弹第二次验证码
+    //
+    //   分支 A：无筛选条件（smartHasFilter=false）
+    //     • 总条数 = endPage × apiPageSize（上限 5000，防止请求过大）
+    //     • 无验证码、flag=false、普通 API（pageNum=1&pageSize=总条数）
+    //     • 无 300 条限制，但深度分页后服务器会循环重复，插件会自动停
+    //
+    //   分支 B：有筛选条件（smartHasFilter=true）
+    //     • 先预请求 total（pageSize=1，无验证码）得到真实命中数
+    //     • 计算「理论总条数」= min(用户想抓的总数, 300) —— 有筛选时服务器第 301 条起就和第 1 页完全重复
+    //     • 若「理论总条数 < 用户起始条号」 → 拒绝（不弹验证码浪费时间）
+    //     • 否则 → pageNum=1&pageSize=理论总条数 一次拉完（弹 1 次验证码）
+    //     • 若被 300 截断了 → truncated=true + 弹窗提示用户（第301条起无法通过有筛选API获取真实新数据）
+    // ---------- 🔴✅ 公共：根据 Tab 类型返回「popup 别名 → API 真实参数名」映射表 ----------
+    //   所有"把 popup 人类友好 key 转成真实请求 key"的地方（probeTotal / fetchListRapid）
+    //   都必须走这里，保证全局一套映射！
+    //   ⚠️ 注意：permit 接口对参数名非常严格，多余参数会导致 total=0！
+    //            所以这里只映射真实需要的 key，不再"兼容填充"一堆冗余参数
+    function _getPopupToApiAliasMap(type) {
+        if (type === 'basic') {
+            return {
+                unit: 'orgName',                               // 建设单位
+                code: 'projectCode',                           // 省级项目编号
+                city: 'cityText',                              // 所在城市（文本；数字ID 在下面统一加）
+                startDate: 'beginDate',                        // 基本信息日期用 beginDate
+                endDate:   'endDate'                           // 基本信息日期用 endDate
+            };
+        }
+        if (type === 'permit') {
+            return {
+                code: 'projectCode',                           // 省级项目编号
+                permitNo: 'constructionPermitCode',            // 施工许可证编号
+                authority: 'authorizeOrgName',                 // 发证机关
+                startDate: 'beginTime',                        // permit 用 beginTime / endTime（严格按 cURL）
+                endDate:   'endTime',
+                city: 'city'                                   // permit 城市文本用 city（cURL 里城市只传 cityCode）
+            };
+        }
+        if (type === 'complete') {
+            return {
+                code: 'projectCode',                           // 省级项目编号
+                authority: 'archiveOrgName',                   // 竣工验收备案机关（注意不是 permit 的 authorizeOrgName）
+                recordNo:  'provinceArchiveCode'               // 省级竣工验收备案编号
+            };
+        }
+        return {};
+    }
+    // ---------- 🔴✅ 公共：每个 Tab "日期 / 城市" 真实接受的参数名（从 SMART_FILTER_MAPS 推断，保证配置即真相） ----------
+    //   permit：日期用 beginTime/endTime，城市数字代码用 cityCode（严格按 cURL！多一个参数 total=0）
+    //   basic： 日期用 beginDate/endDate，城市数字代码用 cityId
+    //   complete：无日期，无城市
+    function _getTabRealParamNames(type) {
+        var dateStart = 'beginTime';
+        var dateEnd = 'endTime';
+        var cityNum = 'cityCode';
+        var cityText = 'city';
+        if (type === 'basic') {
+            dateStart = 'beginDate';
+            dateEnd = 'endDate';
+            cityNum = 'cityId';
+            cityText = 'cityText';
+        }
+        if (type === 'complete') {
+            dateStart = null; dateEnd = null; cityNum = null; cityText = null;
+        }
+        return { dateStart: dateStart, dateEnd: dateEnd, cityNum: cityNum, cityText: cityText };
+    }
+    // ---------- 🔴✅ 公共：把 popup filters 用上面别名映射合并进 fp（严格模式：只填真实需要的参数，不再冗余填充） ----------
+    function _mergePopupFiltersIntoFp(type, fp, incomingFilters) {
+        if (!fp) fp = {};
+        var flt = incomingFilters || {};
+        var SYSTEM_KEYS = { fetchMode: true, startPage: true, endPage: true, apiPageSize: true, pageNum: true, pageSize: true, pageMode: true, _skipPageMode: true };
+        var alias = _getPopupToApiAliasMap(type);
+        var pn = _getTabRealParamNames(type);
+        for (var ik in flt) {
+            if (!flt.hasOwnProperty(ik) || SYSTEM_KEYS[ik]) continue;
+            var iv = String(flt[ik] || '').trim();
+            if (!iv) continue;
+            var realKey = (alias && alias[ik]) ? alias[ik] : ik;
+            // 🔴 日期：只填该 Tab 真正接受的那一个字段名（不再 beginTime+beginDate+startDate 全塞）
+            var isDateField = (ik === 'startDate' || ik === 'endDate' || /[Dd]ate$|[Tt]ime$/.test(realKey));
+            if (isDateField) {
+                var dv = iv.substring(0, 10);
+                if ((ik === 'startDate' || realKey === 'beginTime' || realKey === 'beginDate' || realKey === 'startDate') && pn.dateStart) {
+                    fp[pn.dateStart] = dv;
+                } else if ((ik === 'endDate' || realKey === 'endTime' || realKey === 'endDate') && pn.dateEnd) {
+                    fp[pn.dateEnd] = dv;
+                } else if (!/^[Dd]ate/.test(realKey)) {
+                    fp[realKey] = dv;
                 }
-                if (names.length > 0) orgName = names.join('、');
+                // 城市字段：先填文本；同时查 cityMap → 只填该 Tab 真正接受的 cityNum 字段（cityCode 或 cityId，不再两个都塞）
+            } else if (ik === 'city' || realKey === 'cityText' || realKey === 'city') {
+                if (pn.cityText) fp[pn.cityText] = iv;
+                try {
+                    var cm = _getCityIdMap();
+                    if (cm && cm[iv] && pn.cityNum) fp[pn.cityNum] = cm[iv];
+                } catch (eCi) {}
+            } else {
+                fp[realKey] = iv;
             }
-            row['建设单位'] = orgName;
-            if (src.dataLevel) row['数据等级'] = src.dataLevel;
-            if (row['省级项目编号']) {
-                row.detailUrl = origin + '/openplatform/#/web/project/detail?projectCode=' + encodeURIComponent(row['省级项目编号']);
-            }
-            return row;
-        });
+        }
+        return fp;
+    }
 
-        console.log('[basic-api] ✅ 返回: rows=' + mapped.length + '/' + rows.length + ', total=' + total + ', code=' + (json.code) + ', msg=' + (json.msg || '') + ', 使用策略=' + strategyTried[strategyTried.length - 1]);
+    // ---------- 🔴✅ 公共：根据「筛选后命中总数」+「用户想抓取条数」计算截断策略 ----------
+    //   - hardLimit 固定 300（服务器有筛选分页极限：第 301 条起就和第 1 页重复，无法拿到真实新数据）
+    //   - totalOverLimit：只要筛选命中总数 > hardLimit 就为 true（用于提示用户"301 条后会重复"）
+    //   - truncatedForUser：用户需求条数超过 hardLimit（真被截断了，实际只能拿到 300 条真实数据）
+    //   - requestSize：实际请求 pageSize = min(用户想抓, hardLimit)
+    function _calcFilteredLimit(probeTotal, userWantedCount, hardLimit) {
+        var HL = Math.max(1, Number(hardLimit) || 300);
+        var total = Math.max(0, Number(probeTotal) || 0);
+        var want = Math.max(1, Number(userWantedCount) || 1);
+        var effectiveMax = Math.min(want, total || want);
+        var totalOverLimit = (total > HL);
+        var truncatedForUser = (effectiveMax > HL);
+        var requestSize = Math.min(HL, effectiveMax);
         return {
-            success: true,
-            data: mapped,
-            rawRows: rows,
-            total: total,
-            pageNum: respPageNum,
-            pageSize: ps,
-            totalPages: total > 0 ? Math.ceil(total / ps) : 0,
-            needCaptcha: needCaptcha,
-            duplicate: _isApiPageDuplicate(rows),
-            rawJson: json,
-            debugInfo: debugInfo
+            hardLimit: HL,
+            probeTotal: total,
+            userWantedCount: want,
+            effectiveMax: effectiveMax,
+            totalOverLimit: totalOverLimit,
+            truncatedForUser: truncatedForUser,
+            requestSize: requestSize,
+            truncInfo: totalOverLimit ? { truncated: true, realTotal: total, hardLimit: HL, truncatedForUser: truncatedForUser } : null
         };
     }
 
-    // ---------- 对外：一键获取某页列表（优先 API，失败回退 DOM，并处理验证码重试） ----------
-    function fetchBasicListPageSmart(pageNum, pageSizePref, outerDoneCallback) {
-        var ps = pageSizePref || 100;
-        var fp = collectFilterParamsFromDom();
-        var needCap = hasAnyFilterCondition();
-        var captchaRetries = 0;
-        var MAX_CAPTCHA_RETRIES = 3;
+    function fetchListRapid(type, pageNum, outerDoneCallback, incomingFilters) {
+        try {
+            var fp = collectSmartFilterParams(type);
+            var flt = incomingFilters || {};
+            var cfg = _getApiListConfig(type);
+            var domFnMap = { 'basic': extractBasicList, 'permit': extractPermitList, 'complete': extractCompleteList };
+            if (!cfg) { outerDoneCallback && outerDoneCallback({ success: false, error: '未知 type=' + type }); return; }
 
-        function tryFetch(captchaOverride) {
-            var cp = captchaOverride || {};
-            var res = fetchBasicListViaApiReal(pageNum, ps, fp, cp);
-            if (res.success) {
-                outerDoneCallback && outerDoneCallback({
-                    success: true,
-                    via: 'api',
-                    data: res.data,
-                    total: res.total,
-                    totalPages: res.totalPages,
-                    pageSize: res.pageSize,
-                    duplicate: res.duplicate,
-                    needCaptcha: needCap,
-                    filterParams: fp,
-                    aborted: false
-                });
-                return;
-            }
-            // 验证码失败 → 刷新 + 让用户重新输入
-            if (needCap && res.captchaFailed && captchaRetries < MAX_CAPTCHA_RETRIES) {
-                captchaRetries++;
-                refreshCaptchaImage(function (capRes) {
-                    capRes = capRes || {};
-                    var newSrc = capRes.src || '';
-                    var tip = '⚠️ 后端返回：' + (res.error || '验证码错误/过期') + '\n请点击「刷新验证码」或直接输入新的验证码';
-                    if (!newSrc) {
-                        var img0 = document.querySelector('.search-module-wrap img.valid-img');
-                        newSrc = img0 ? (img0.getAttribute('src') || '') : '';
-                    }
-                    showCaptchaPrompt(newSrc, tip, captchaRetries, function (uInput) {
-                        if (uInput && uInput.aborted) {
-                            // 🚫 用户点了中止爬取 → 直接告诉 popup 停止
-                            outerDoneCallback && outerDoneCallback({ success: false, aborted: true, via: 'api' });
-                            return;
-                        }
-                        if (uInput && uInput.canceled) {
-                            // 用户取消 → 回退 DOM 方案
-                            fallbackToDom();
-                            return;
-                        }
-                        if (!uInput || !uInput.code) {
-                            fallbackToDom();
-                            return;
-                        }
-                        // ✅ 带 kaptchaKey 传进去（和验证码值一一对应，解决「验证码已过期」根因！）
-                        tryFetch({ code: uInput.code, kaptchaKey: uInput.kaptchaKey || capRes.kaptchaKey || '' });
-                    });
-                });
-                return;
-            }
-            // 其他错误或达到重试上限 → 回退 DOM 方案
-            console.warn('[basic-api] 回退 DOM 方案，原因：', res.error || '未知');
-            fallbackToDom();
-        }
+            // 🔴✅ 融合 popup 输入框传来的筛选条件（统一走公共函数）
+            fp = _mergePopupFiltersIntoFp(type, fp, flt);
+            var smartHasFilter = _hasAnyFilter(fp);
 
-        function fallbackToDom() {
-            console.log('[basic-api] ↩️  回退 DOM 提取方案（extractBasicList）');
-            try {
-                var domRows = extractBasicList({}, pageNum);
-                outerDoneCallback && outerDoneCallback({
-                    success: true,
-                    via: 'dom',
-                    data: domRows,
-                    total: 0,
-                    totalPages: 0,
-                    pageSize: domRows.length,
-                    duplicate: false,
-                    needCaptcha: needCap,
-                    filterParams: fp,
-                    aborted: false
-                });
-            } catch (eDom) {
-                outerDoneCallback && outerDoneCallback({ success: false, error: eDom.message || String(eDom) });
-            }
-        }
+            // 🔴 极速模式固定 startPage=1，直接按 endPage 算总数据量，一次性 pageNum=1&pageSize=总数 拉完
+            var userPsInput = Math.max(1, Number(flt.apiPageSize) || 100);
+            var userEndPage = Math.max(1, Number(flt.endPage) || Number(pageNum) || 1);
+            var HARD_LIMIT_FILTERED = 300;     // 有筛选时服务器极限（第301条起就和第1页重复，无法获取真实新数据）
+            var pn = Number(pageNum) || 1;
+            var userWantedTotal = userEndPage * userPsInput;
 
-        // 无筛选条件：直接 fetch（flag=false，kaptchaKey 空，不需要验证码）
-        if (!needCap) {
-            console.log('[basic-api] 无筛选条件 → 无需验证码，直接请求 API (pageSize=' + ps + ')');
-            tryFetch({});
-            return;
-        }
+            console.log('%c[rapid:' + type + '] 🚀 极速模式【一次性拉完】：pageNum=1&pageSize=' + userWantedTotal +
+                '（用户 endPage=' + userEndPage + ', 每页=' + userPsInput + '）, hasFilter=' + smartHasFilter + ', filterParams=',
+                'background:#1890ff;color:#fff;font-weight:bold;', fp);
 
-        // 有筛选条件：先刷新验证码图片（拿新的 kaptchaKey！）→ 再弹浮层让用户输入
-        console.log('[basic-api] 有筛选条件 → 先刷新验证码并获取 kaptchaKey...');
-        var capImg = document.querySelector('.search-module-wrap img.valid-img');
-        var initImgSrc = capImg ? (capImg.getAttribute('src') || '') : '';
-        refreshCaptchaImage(function (freshCapRes) {
-            freshCapRes = freshCapRes || {};
-            var useSrc = freshCapRes.src || initImgSrc;
-            if (!useSrc) {
-                // 取不到验证码图片 → 回退 DOM
-                console.warn('[basic-api] 取不到验证码图片，回退 DOM 方案');
-                fallbackToDom();
-                return;
-            }
-            showCaptchaPrompt(
-                useSrc,
-                '检测到您填写了筛选条件，\n后端要求必须输入验证码才能继续抓取。\n\n⚠️ 重要：验证码用一次就会失效，\n翻 N 页需要输入 N 次验证码。\n💡 建议：取消筛选条件 → 抓全部数据 → 本地 Excel 里筛选',
-                0,
-                function (uInput) {
-                    if (uInput && uInput.aborted) {
-                        // 🚫 用户点了中止爬取
-                        outerDoneCallback && outerDoneCallback({ success: false, aborted: true, via: 'api' });
-                        return;
-                    }
-                    if (uInput && uInput.canceled) {
-                        fallbackToDom();
-                        return;
-                    }
-                    if (!uInput || !uInput.code) {
-                        fallbackToDom();
-                        return;
-                    }
-                    // ✅ 把 kaptchaKey 传进去（从 showCaptchaPrompt 或 freshCapRes 里取最新的）
-                    tryFetch({ code: uInput.code, kaptchaKey: uInput.kaptchaKey || freshCapRes.kaptchaKey || '' });
+            // ------------ 包装 done：强制 totalPages=1，彻底阻止 popup 继续翻下一页弹验证码 ------------
+            var doneFinal = function (res) {
+                if (res && res.success) {
+                    if (!res.totalPages || res.totalPages > 1) console.log('[rapid:' + type + '] 🔒 强制 totalPages=1（原=' + res.totalPages + '），popup 不会再请求下一页');
+                    res.totalPages = 1;
+                    if (typeof res.hasFilter === 'undefined') res.hasFilter = !!smartHasFilter;
                 }
-            );
-        });
+                outerDoneCallback && outerDoneCallback(res);
+            };
+
+            // ================================================================
+            // 🔴 分支 A：无筛选 → 同样最多前 300 条真实数据（服务器已封死，第 301 条起不管有没有筛选都重复）
+            //     请求策略：pageNum=1&pageSize=min(用户期望, 300) 一次性请求
+            // ================================================================
+            if (!smartHasFilter) {
+                var HARD_LIMIT_NO_FILTER = 300;   // 和有筛选共用同一上限（服务器已统一封死 301+ 全重复）
+                var wantNoFilter = Math.max(0, Number(userWantedTotal) || 0);
+                var oneShotSizeNoFilter = wantNoFilter > 0
+                    ? Math.min(wantNoFilter, HARD_LIMIT_NO_FILTER)
+                    : Math.min(100, HARD_LIMIT_NO_FILTER);
+                var truncatedToHardLimit = wantNoFilter > HARD_LIMIT_NO_FILTER;
+                console.log('%c[rapid:' + type + '-A] 🟢 无筛选 → 一次性请求：pageNum=1&pageSize=' + oneShotSizeNoFilter +
+                    (truncatedToHardLimit ? ('（用户期望 ' + wantNoFilter + ' 条 > 服务器硬上限 ' + HARD_LIMIT_NO_FILTER + '，已自动截断：服务器第 301 条起不管有没有筛选全部返回重复数据）') : ''),
+                    'color:#52c41a;font-weight:bold;');
+                var rawRes = fetchListViaApiReal(type, 1, oneShotSizeNoFilter, { skipOverlapCheck: true, debug: true });
+                if (rawRes && rawRes.success) {
+                    var finalData = (rawRes.data && Array.isArray(rawRes.data)) ? rawRes.data.slice(0, oneShotSizeNoFilter) : [];
+                    var respBuild = {
+                        success: true,
+                        via: 'api',
+                        data: finalData,
+                        total: rawRes.total,
+                        totalPages: 1,
+                        pageSize: oneShotSizeNoFilter,
+                        duplicate: false,
+                        needCaptcha: false,
+                        filterParams: cfg.emptyFilter || {},
+                        aborted: false,
+                        hasFilter: false
+                    };
+                    if (truncatedToHardLimit) {
+                        // 超过 300：和有筛选一样透传 beyondLimit/filteredLimitReached，popup 会自动显示黄色警告 + forceStop
+                        respBuild.beyondLimit = true;
+                        respBuild.filteredLimitReached = true;
+                        respBuild.realTotal = Math.max(Number(rawRes.total) || wantNoFilter, wantNoFilter);
+                        respBuild.hardLimit = HARD_LIMIT_NO_FILTER;
+                        respBuild.filteredLimitMsg = '已截断至前 ' + HARD_LIMIT_NO_FILTER + ' 条（服务器第 301 条起全部重复，与筛选条件无关）';
+                        respBuild.partialSuccess = true;
+                        respBuild.partialWantedCount = wantNoFilter;
+                        respBuild.partialActualCount = finalData.length;
+                        respBuild.error = '服务器第 301 条起全部返回重复数据（无论有没有筛选条件）。期望 ' + wantNoFilter + ' 条，本次仅返回前 ' + HARD_LIMIT_NO_FILTER + ' 条真实数据，无法获取更多。';
+                    }
+                    doneFinal(respBuild);
+                    return;
+                }
+                // 🔴 失败直接返回错误，不再回退 DOM
+                console.error('[rapid:' + type + '-A] ❌ API 失败：' + ((rawRes && rawRes.error) || '未知') + '（不再回退 DOM）');
+                doneFinal({
+                    success: false,
+                    error: ((rawRes && rawRes.error) || '未知错误'),
+                    via: 'api-fail',
+                    data: [],
+                    total: 0,
+                    totalPages: 1,
+                    _noFallback: true
+                });
+                return;
+            }
+
+            // ================================================================
+            // 🔴 分支 B：有筛选 → 预请求 total → 若 >300 就截断到 300 → 一次拉完（1次验证码）
+            // ================================================================
+            var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+            var endpoint = cfg.path;
+            var filterQs = _buildFilterQueryString(fp);
+            var probeQs = 'pageNum=1&pageSize=1&kaptcha=&kaptchaKey=&flag=false';
+            var probeUrl = origin + endpoint + '?' + probeQs + filterQs;
+            console.log('[rapid:' + type + '-B] 🔍 有筛选：先预请求 total（无验证码） → ' + probeUrl);
+
+            try {
+                var pXhr = new XMLHttpRequest();
+                pXhr.open('GET', probeUrl, false);
+                pXhr.withCredentials = true;
+                pXhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+                pXhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                pXhr.send(null);
+                var pText = pXhr.responseText || '';
+                var pJson = {};
+                try { pJson = JSON.parse(pText || '{}'); } catch (eP) {}
+                var probeTotal = parseInt(String(pJson && (pJson.total || (pJson.data && pJson.data.total)) || 0)) || 0;
+                console.log('[rapid:' + type + '-B] ✅ 预请求命中：total=' + probeTotal);
+
+                var userWantRec = userEndPage * userPsInput;
+                var limitCalc = _calcFilteredLimit(probeTotal, userWantRec, HARD_LIMIT_FILTERED);
+                var requestSize = limitCalc.requestSize;
+                var totalOverLimit = limitCalc.totalOverLimit;
+                var truncatedForUser = limitCalc.truncatedForUser;
+
+                console.log('%c[rapid:' + type + '-B] 🔴 有筛选一次性：totalOverLimit=' + totalOverLimit +
+                    ', 用户想抓 ' + userWantRec + ' 条，实际命中 ' + probeTotal + ' 条，最终请求 pageNum=1&pageSize=' + requestSize +
+                    (truncatedForUser ? ('（用户需求>' + HARD_LIMIT_FILTERED + ' 被强制截断到' + HARD_LIMIT_FILTERED + '）') : (totalOverLimit ? ('（total>' + HARD_LIMIT_FILTERED + '，提示用户第' + (HARD_LIMIT_FILTERED + 1) + '条就重复，本次只抓前' + requestSize + '条真实数据）') : '')),
+                    (truncatedForUser ? 'background:#fa8c16;color:#fff;font-weight:bold;' : (totalOverLimit ? 'background:#faad14;color:#fff;font-weight:bold;' : 'background:#52c41a;color:#fff;font-weight:bold;')));
+
+                fetchListRapidFilteredApi(type, 1, requestSize, fp, function (res) {
+                    if (res && res.success) {
+                        if (limitCalc.truncInfo) {
+                            res.filteredLimitReached = true;
+                            res.filteredLimitMsg = '已截断至前 ' + HARD_LIMIT_FILTERED + ' 条（服务器第 ' + (HARD_LIMIT_FILTERED + 1) + ' 条起与第 1 页重复，与筛选条件无关）';
+                            if (typeof limitCalc.truncInfo.realTotal === 'number') res.realTotal = limitCalc.truncInfo.realTotal;
+                            if (typeof limitCalc.truncInfo.hardLimit === 'number') res.hardLimit = limitCalc.truncInfo.hardLimit;
+                            res.beyondLimit = true;
+                        }
+                    }
+                    doneFinal(res);
+                }, limitCalc.truncInfo);
+                return;
+            } catch (pErr) {
+                // 🔴 预请求异常（XHR 失败 / JSON 解析失败等）：也不要回退 DOM，直接返回错误，把问题暴露给用户看
+                console.error('[rapid:' + type + '-B] ❌ 预请求异常（不再回退 DOM/不再兜底请求）：', pErr.message || pErr);
+                outerDoneCallback && outerDoneCallback({
+                    success: false,
+                    error: '预请求 total 失败: ' + (pErr && pErr.message ? pErr.message : String(pErr)),
+                    via: 'api-probe-fail',
+                    _noFallback: true,
+                    data: [],
+                    total: 0
+                });
+                return;
+            }
+        } catch (eBig) {
+            // 🔴 顶层异常：同样直接返回错误，不要回退 DOM（之前 SERVER_SINGLE_PAGE_HARD_LIMIT 未定义 就是到这里偷偷回退 DOM 只拿 10 条，害你判断失误）
+            console.error('[rapid:' + type + '] ❌ 极速模式顶层异常（不再回退 DOM）：', eBig && eBig.message ? eBig.message : eBig, eBig && eBig.stack ? eBig.stack : '');
+            outerDoneCallback && outerDoneCallback({
+                success: false,
+                error: '极速模式异常: ' + ((eBig && eBig.message) || String(eBig)),
+                via: 'api-fatal',
+                _noFallback: true,
+                data: [],
+                total: 0
+            });
+        }
+    }
+
+    // ---------- 通用：3 种类型的直取配置 ----------
+    function _getApiListConfig(type) {
+        if (type === 'basic') {
+            return {
+                path: '/api/openplatform/project/list',
+                emptyFilter: { projectName: '', projectCode: '', orgName: '', cityId: '', cityText: '', projectClassId: '', projectClassText: '', beginDate: '', endDate: '' },
+                skipOverlap: false   // basic 类型是旧逻辑，保留重叠检测（防止深度截断）
+            };
+        }
+        if (type === 'permit') {
+            return {
+                path: '/api/openplatform/constructionPermit/list',
+                emptyFilter: { projectName: '', code: '', permitNo: '', authority: '', startDate: '', endDate: '', city: '' },
+                skipOverlap: true    // permit/complete 极速模式默认跳过重叠检测（防止误判丢第二页）
+            };
+        }
+        if (type === 'complete') {
+            return {
+                path: '/api/openplatform/projectAcceptanceArchive/list',
+                emptyFilter: { projectName: '', code: '', authority: '', recordNo: '' },
+                skipOverlap: true
+            };
+        }
+        return null;
+    }
+    function _getRowMapper(type) {
+        if (type === 'basic') return _mapBasicRowFromApi;
+        if (type === 'permit') return _mapPermitRowFromApi;
+        if (type === 'complete') return _mapCompleteRowFromApi;
+        return null;
+    }
+
+    // 🔴✅ 统一把「数据等级」转成字符串：API 返回可能是 {code,name}/{value,label}/{...} 对象（否则页面显示 [object Object]）
+    function _stringifyDataLevel(v) {
+        if (v === null || v === undefined) return '';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'number') return String(v);
+        if (typeof v === 'boolean') return v ? '是' : '否';
+        if (typeof v === 'object') {
+            try {
+                var name = v.name || v.label || v.text || v.value || v.code || v.level || '';
+                if (name !== '' && name !== null && name !== undefined) {
+                    if (typeof name === 'string' || typeof name === 'number') return String(name);
+                }
+                return JSON.stringify(v);
+            } catch (e) {
+                try { return JSON.stringify(v); } catch (e2) { return '[object Object]'; }
+            }
+        }
+        try { return String(v); } catch (e) { return ''; }
+    }
+
+    function _mapPermitRowFromApi(src, origin, basePath) {
+        var row = {
+            '工程名称': src.projectName || '',
+            '施工许可证编号': src.constructionPermitCode || '',
+            '省级项目编号': src.projectCode || '',
+            '发证机关': src.authorizeOrgName || '',
+            '日期': (src.authorizeDate || '').substring(0, 10),
+            '所在城市': src.city || '',
+            '数据等级': _stringifyDataLevel(src.dataLevel)
+        };
+        if (row['施工许可证编号']) {
+            row.detailUrl = origin + basePath + '#/web/permit?permitCode=' + encodeURIComponent(row['施工许可证编号']);
+        }
+        return row;
+    }
+
+    function _mapCompleteRowFromApi(src, origin, basePath) {
+        var accId = String(src.id || '');
+        var row = {
+            '工程名称': src.projectName || '',
+            '省级项目编号': src.projectCode || '',
+            '备案机关': src.archiveOrgName || '',
+            '竣工验收备案编号': src.archiveCode || '',
+            '省级竣工验收备案编号': src.provinceArchiveCode || '',
+            '数据等级': _stringifyDataLevel(src.dataLevel),
+            // 🔴 pure API 用：background 从 message.listRow._acceptanceId 取（不用走仿真点击/_locator 了）
+            '_acceptanceId': accId
+        };
+        // 🔴 真实 URL 格式（随便造的，只要通过 rowsWithUrl 的 length>5 检查即可；真正取详情用 listRow._acceptanceId 纯接口）
+        if (accId && /^\d+$/.test(accId)) {
+            row.detailUrl = origin + '/openplatform/#/web/projectAcceptanceArchive/detail?id=' + encodeURIComponent(accId);
+        }
+        return row;
+    }
+
+    function fetchListViaApiReal(type, pageNum, pageSize, dupOpts) {
+        var cfg = _getApiListConfig(type);
+        if (!cfg) return { success: false, error: '未知 type=' + type };
+        var pn = Number(pageNum) || 1;
+        var ps = Number(pageSize) || 100;
+        var dOpt = dupOpts || {};
+        var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+        var basePath = window.location.pathname || '/openplatform/';
+
+        // 🔴 致命 BUG 修复：之前写死 permit/complete 二选一，完全没考虑 basic → 被当成 complete 映射 → __SIMULATE_CLICK__ 弹新窗口卡死！
+        var mapper = _getRowMapper(type);
+        if (!mapper) return { success: false, error: '未找到 mapper 函数（type=' + type + '）' };
+
+        var qs = 'pageNum=' + pn + '&pageSize=' + ps + '&kaptchaKey=&flag=false';
+        var url = origin + cfg.path + '?' + qs;
+        console.log('%c[' + type + '-api] 请求 page=' + pn + ', size=' + ps + ' → ' + url, 'color:#1890ff;font-weight:bold;');
+
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, false);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send(null);
+            if (xhr.status !== 200) return { success: false, error: 'HTTP ' + xhr.status };
+            var text = xhr.responseText || '';
+            var json = {};
+            try { json = JSON.parse(text || '{}'); } catch (eP) {
+                return { success: false, error: 'JSON解析失败: ' + text.substring(0, 200) };
+            }
+            if (json.code !== 0 && json.code !== 200) {
+                return { success: false, error: (json.msg || '接口返回错误 code=' + json.code) };
+            }
+            var rows = [];
+            if (Array.isArray(json.rows)) rows = json.rows;
+            else if (json.data && Array.isArray(json.data.rows)) rows = json.data.rows;
+            else if (json.data && Array.isArray(json.data)) rows = json.data;
+            var total = parseInt(String(json.total || 0)) || 0;
+
+            var mapped = rows.map(function (src) { return mapper(src, origin, basePath); });
+            // 🔴 overlap 策略：调用方显式指定 > cfg 默认值。basic=false(开检测防截断), permit/complete=true(关检测防误判丢页)
+            var shouldSkip = (typeof dOpt.skipOverlapCheck === 'boolean') ? dOpt.skipOverlapCheck : !!cfg.skipOverlap;
+            var dupArg = { skipOverlapCheck: shouldSkip, debug: true };
+            var isDup = _isApiPageDuplicate(rows, dupArg);
+            console.log('[' + type + '-api] ✅ page=' + pn + ' 返回 rows=' + mapped.length + ', total=' + total + ', duplicate=' + isDup + ' (skipOverlap=' + shouldSkip + ')');
+            return {
+                success: true,
+                data: mapped,
+                rawRows: rows,
+                total: total,
+                pageSize: ps,
+                totalPages: total > 0 ? Math.ceil(total / ps) : 0,
+                duplicate: isDup
+            };
+        } catch (e) {
+            return { success: false, error: e.message || String(e) };
+        }
     }
 
     function extractBasicList(filters, page) {
@@ -1155,8 +1771,10 @@
                 '项目名称': projectName,
                 '建设单位': unit,
                 '省级项目编号': code,
-                '项目所在地': city,
-                '所在城市': city
+                // ✅ 所在市：列表页有「所在市」列 → 直接写入标准列「所在市」（用户明确：列表里就能找到，本应是这个字段的数据）
+                '所在市': city,
+                // ✅ 项目所在地：列表页 DOM 抓不到 province/city/division 拼接 → 先留空，详情页接口抓取后会回填为 省+市+区
+                '项目所在地': ''
             };
             if (detailUrl) {
                 rowData.detailUrl = detailUrl;
@@ -1170,27 +1788,15 @@
                 // 取 #/web/... hash 之前的基础路径 + 拼接详情 hash
                 rowData.detailUrl = baseOrigin + basePath + '#/web/project/detail?projectCode=' + encodeURIComponent(code.trim());
                 console.log('[basic-list] ✅ 构造详情URL (code=' + code + '): ' + rowData.detailUrl);
-            } else {
-                // 最后的兜底：保存定位特征（基本不会走到了）
-                rowData._locator = {
-                    type: 'basic',
-                    listUrl: window.location.href,
-                    projectName: projectName,
-                    code: code,
-                    city: city,
-                    projClass: projClass,
-                    unit: unit,
-                    rowIndex: r
-                };
-                rowData.detailUrl = '__SIMULATE_CLICK__';
             }
+            // 🔴 已完全弃用仿真点击：没 code 时干脆不设置 detailUrl（popup 会过滤掉，进入详情阶段直接跳过）
 
             result.push(rowData);
         }
-        console.log('[basic-list] 提取结果: 共' + result.length + '条, 有构造URL=' + result.filter(function (x) { return x.detailUrl && x.detailUrl.indexOf('projectCode=') !== -1; }).length + ', 需仿真点击=' + result.filter(function (x) { return x.detailUrl === '__SIMULATE_CLICK__'; }).length);
+        console.log('[basic-list] 提取结果: 共' + result.length + '条, 有构造URL=' + result.filter(function (x) { return x.detailUrl && x.detailUrl.indexOf('projectCode=') !== -1; }).length);
         if (result.length > 0) {
             console.log('[basic-list] 前3条定位:', result.slice(0, 3).map(function (r, i) {
-                if (r.detailUrl === '__SIMULATE_CLICK__') return ('[仿真点击' + i + '] ' + r['项目名称'] + ' | ' + r['省级项目编号']);
+                if (!r.detailUrl) return ('[无detailUrl' + i + '] ' + r['项目名称'] + ' | ' + r['省级项目编号']);
                 return ('[URL' + i + '] ' + (r.detailUrl || '').slice(0, 120));
             }));
         }
@@ -1250,44 +1856,21 @@
             if (detailUrl) {
                 rowData.detailUrl = detailUrl;
             } else if (permitNo && permitNo.trim() !== '') {
-                // 🔴✅ 施工许可直接构造详情URL：#/web/permit?permitCode=施工许可证编号
-                // 从用户截图中观察到的真实URL格式：/web/permit?permitCode=440106202607220401
                 var baseOrigin = window.location.origin || 'https://skypt.gdcic.net';
                 var basePath = window.location.pathname || '/openplatform/';
                 rowData.detailUrl = baseOrigin + basePath + '#/web/permit?permitCode=' + encodeURIComponent(permitNo.trim());
                 console.log('[permit-list] ✅ 构造施工许可详情URL (permitNo=' + permitNo + '): ' + rowData.detailUrl);
             } else if (code && code.trim() !== '') {
-                // 🔴 兜底：如果没 permitNo（少见），用省级项目编号试试，或者用仿真点击
-                rowData._locator = {
-                    type: 'permit',
-                    listUrl: window.location.href,
-                    projectName: projectName,
-                    permitNo: permitNo,
-                    code: code,
-                    authority: authority,
-                    date: date,
-                    city: city,
-                    rowIndex: r
-                };
-                rowData.detailUrl = '__SIMULATE_CLICK__';
-            } else {
-                rowData._locator = {
-                    type: 'permit',
-                    listUrl: window.location.href,
-                    projectName: projectName,
-                    permitNo: permitNo,
-                    code: code,
-                    authority: authority,
-                    date: date,
-                    city: city,
-                    rowIndex: r
-                };
-                rowData.detailUrl = '__SIMULATE_CLICK__';
+                // permitNo 缺失时用省级项目编号构造（极少数情况可能不匹配，但绝不用仿真点击）
+                var baseOrigin2 = window.location.origin || 'https://skypt.gdcic.net';
+                var basePath2 = window.location.pathname || '/openplatform/';
+                rowData.detailUrl = baseOrigin2 + basePath2 + '#/web/permit?projectCode=' + encodeURIComponent(code.trim());
             }
+            // 🔴 已完全弃用仿真点击：permitNo/code 都缺失时不设置 detailUrl（popup 会过滤跳过）
 
             result.push(rowData);
         }
-        console.log('[permit-list] 提取结果: 共' + result.length + '条, 有构造URL=' + result.filter(function (x) { return x.detailUrl && x.detailUrl.indexOf('permitCode=') !== -1; }).length + ', 需仿真点击=' + result.filter(function (x) { return x.detailUrl === '__SIMULATE_CLICK__'; }).length);
+        console.log('[permit-list] 提取结果: 共' + result.length + '条, 有构造URL=' + result.filter(function (x) { return x.detailUrl && (x.detailUrl.indexOf('permitCode=') !== -1 || x.detailUrl.indexOf('projectCode=') !== -1); }).length);
         if (result.length > 0) {
             console.log('[permit-list] 前3条 (含工程名称/数据等级):', result.slice(0, 3).map(function (r, i) {
                 return {
@@ -1545,30 +2128,17 @@
                     }
                 } catch (eFill) {}
             }
-            // 🔴✅ 竣工验收备案：优先走接口（拿到数字 id → 纯 fetch；没拿到 → fallback 弹 Modal 兜底）
-            rowData._locator = {
-                type: 'complete',
-                listUrl: window.location.href,
-                projectName: projectName,
-                code: code,
-                authority: authority,
-                recordNo: recordNo,
-                rowIndex: r,
-                acceptanceId: numericId,
-                listRow: JSON.parse(JSON.stringify(rowData))
-            };
-            // 🔴✅ 修复 BUG：complete 永远走 __SIMULATE_CLICK__ 分支 → 交给 background 里 findClickAndExtractDetail
-            // （这个函数里已经写了：有 acceptanceId → 纯 API fetch；无 acceptanceId/API 失败 → 点弹 Modal 兜底）
-            // 之前把 detailUrl 标成 '__API_FETCH__' → popup 走 openAndExtractDetail，把 '__API_FETCH__' 当真实 URL 打开了 → chrome-extension://__API_FETCH__ 无效页卡死！
-            rowData.detailUrl = '__SIMULATE_CLICK__';
+            // 🔴 已完全弃用仿真点击：有数字 acceptanceId 时造一个"过 rowsWithUrl 过滤"的虚拟 detailUrl；没 id 时不设置 detailUrl（popup 过滤跳过）
+            if (numericId) {
+                rowData.detailUrl = window.location.origin + (window.location.pathname || '/openplatform/') + '#/web/projectAcceptanceArchive/detail?id=' + encodeURIComponent(numericId);
+            }
 
             result.push(rowData);
         }
-        console.log('[complete-list] 提取结果: 共' + result.length + '条, 有构造URL=' + result.filter(function (x) { return x.detailUrl && (x.detailUrl.indexOf('recordCode=') !== -1 || x.detailUrl.indexOf('recordNo=') !== -1); }).length + ', 接口直接获取(有数字ID)=' + result.filter(function (x) { return (x._acceptanceId && x._acceptanceId !== ''); }).length + ', 需仿真点击(无ID,fallback)=' + result.filter(function (x) { return !x._acceptanceId || x._acceptanceId === ''; }).length);
+        console.log('[complete-list] 提取结果: 共' + result.length + '条, 有数字ID=' + result.filter(function (x) { return (x._acceptanceId && x._acceptanceId !== ''); }).length);
         if (result.length > 0) {
             console.log('[complete-list] 前3条定位:', result.slice(0, 3).map(function (r, i) {
                 if (r._acceptanceId && r._acceptanceId !== '') return ('[接口获取' + i + '] id=' + (r._acceptanceId || '') + ' | ' + r['工程名称'] + ' | ' + r['竣工验收备案编号']);
-                if (r.detailUrl === '__SIMULATE_CLICK__') return ('[仿真点击' + i + '] ' + r['工程名称'] + ' | ' + r['竣工验收备案编号']);
                 return ('[URL' + i + '] ' + (r.detailUrl || '').slice(0, 120));
             }));
         }
@@ -2061,7 +2631,11 @@
             '建设单位': ['建设单位名称', '单位名称', '单位'],
             '省级项目编号': ['项目编号', '项目编码'],
             '组织机构代码': ['组织代码', '机构代码', '统一社会信用代码'],
-            '项目所在地': ['所在地', '所在地区', '所在市', '所属地区'],
+            '项目分类': ['项目分类', '分类', '项目类别', '类别'],
+            // ✅ 所在市：只匹配市一级的单字段别名（用户明确：列表里就能找到的单列数据）
+            '所在市': ['所在市', '城市', '市', '所属市'],
+            // ✅ 项目所在地：匹配省+市+区 或 「所在地区/所属地区」这种组合字段（详情页才有，需要拼接）
+            '项目所在地': ['所在地', '所在地区', '所属地区', '建设地点'],
             '详细地址': ['地址', '项目地址', '工程地址'],
             '立项文号': ['立项批文号', '批准文号', '批文号'],
             '立项级别': ['立项等级', '项目级别', '项目等级'],
@@ -2737,350 +3311,16 @@
         return result;
     }
 
+    // 🔴 仿真点击：已完全弃用（仅保留空壳函数避免引用报错，永远不会被调用）
     function clickCompleteRowAndExtractModal(rowIndex, locator, cb) {
-        var loc = locator || {};
-        var ri = (typeof rowIndex === 'number' && rowIndex >= 0) ? rowIndex : (loc.rowIndex || 0);
-        var finished = false;
-        var maxWait = 28000;
-        var waited = 0;
-        var modalEl = null;
-        var tCheck = null;
-        var absTimeout = null;
-
-        function done(success, data, err) {
-            if (finished) return;
-            finished = true;
-            if (tCheck) { try { clearInterval(tCheck); } catch (e) {} tCheck = null; }
-            if (absTimeout) { try { clearTimeout(absTimeout); } catch (e) {} absTimeout = null; }
-            try {
-                if (modalEl) _closeCompleteModal(modalEl);
-                else _closeCompleteModal(_getCompleteModalRoot());
-            } catch (ec) {}
-            setTimeout(function () {
-                try { cb({ success: success, data: data || {}, error: err || '' }); }
-                catch (ecb) { console.error('[content] clickComplete callback 异常:', ecb); }
-            }, 450);
-        }
-
-        absTimeout = setTimeout(function () {
-            console.warn('[content] ⚠️ 竣工验收备案 35s 绝对超时兜底，强制结束...');
-            done(false, {}, '绝对超时(35s)');
-        }, 35000);
-
-        try {
-            // 前置清理：关任何遗留弹窗 + 滚到顶部
-            try {
-                var prevModal = _getCompleteModalRoot();
-                if (prevModal) { _closeCompleteModal(prevModal); console.log('[content] 🧹 清理上一个遗留弹窗'); }
-                window.scrollTo(0, 0);
-            } catch (ePre) {}
-
-            var rows = getTableRows();
-            if (!rows || rows.length === 0) { done(false, {}, '找不到列表行'); return; }
-            if (ri >= rows.length) ri = rows.length - 1;
-
-            var headers = safeGetHeaders();
-            var idxRecord = getColIndex(headers, ['备案编号', '竣工验收备案编号']);
-            var cells = rows[ri].querySelectorAll('td');
-            var targetCell = null;
-            if (idxRecord !== -1 && cells[idxRecord]) targetCell = cells[idxRecord];
-            if (!targetCell) {
-                for (var ic = 0; ic < cells.length; ic++) {
-                    var cText = getCellText(cells[ic]);
-                    if (loc.recordNo && cText && cText.indexOf(loc.recordNo.slice(0, 10)) !== -1) {
-                        targetCell = cells[ic]; break;
-                    }
-                }
-            }
-            if (!targetCell) targetCell = cells[1] || rows[ri];
-
-            // ============ 🔴✅ 精确找可点击的目标：优先找【文本=recordNo 的那个元素】（用户截图里蓝色可点的就是那段文字本身！）============
-            var recordNoExact = (loc.recordNo || '').trim();
-            var candidates = [];
-            // 1. 先找 targetCell 里所有后代元素
-            var allInside = targetCell.querySelectorAll('*');
-            for (var ci = 0; ci < allInside.length; ci++) {
-                var e = allInside[ci];
-                var txt = getCellText(e);
-                if (!txt) continue;
-                // 文本等于/包含 recordNo → 优先选它！
-                if (recordNoExact && (txt === recordNoExact || txt.indexOf(recordNoExact) !== -1)) {
-                    candidates.unshift({ el: e, score: 100, reason: '文本精确匹配recordNo', txt: txt });
-                } else if (e.tagName === 'A' || e.tagName === 'BUTTON') {
-                    candidates.push({ el: e, score: 70, reason: '是a/button标签', txt: txt });
-                } else if (e.classList && (e.classList.contains('clickable') || e.classList.contains('link') || e.classList.contains('text-link'))) {
-                    candidates.push({ el: e, score: 80, reason: '含link/clickable类', txt: txt });
-                } else if (e.getAttribute && (e.getAttribute('role') === 'button' || e.getAttribute('onclick') || e.getAttribute('tabindex'))) {
-                    candidates.push({ el: e, score: 75, reason: '有button/onclick/tabindex属性', txt: txt });
-                }
-            }
-            // 2. 兜底：targetCell 本身也算一个候选
-            candidates.push({ el: targetCell, score: 40, reason: '整列兜底', txt: getCellText(targetCell) });
-            // 3. 整行里找
-            if (recordNoExact && candidates.length === 1 && candidates[0].score <= 50) {
-                var allInRow = rows[ri].querySelectorAll('*');
-                for (var ri2 = 0; ri2 < allInRow.length; ri2++) {
-                    var re2 = allInRow[ri2];
-                    var rt = getCellText(re2);
-                    if (rt && rt.indexOf(recordNoExact) !== -1) {
-                        candidates.unshift({ el: re2, score: 95, reason: '行内文本匹配recordNo', txt: rt });
-                    }
-                }
-            }
-            // 按 score 降序
-            candidates.sort(function (a, b) { return b.score - a.score; });
-            console.log('[content] 🎯 可点击候选列表(Top5):', candidates.slice(0, 5).map(function (c, i) {
-                return {
-                    i: i, score: c.score, reason: c.reason, tag: c.el.tagName,
-                    cls: c.el.className ? String(c.el.className).slice(0, 80) : '',
-                    txt: (c.txt || '').slice(0, 80),
-                    outerHTML: (c.el.outerHTML || '').replace(/\s+/g, ' ').slice(0, 180)
-                };
-            }));
-
-            if (candidates.length === 0) { done(false, {}, '找不到可点击元素'); return; }
-            var clickable = candidates[0].el;
-
-            // ============ 🔴 滚到视口中央 ============
-            try {
-                if (typeof clickable.scrollIntoView === 'function') {
-                    try { clickable.scrollIntoView({ block: 'center', inline: 'center' }); }
-                    catch (eScr) { try { clickable.scrollIntoView(true); } catch (eScr2) {} }
-                }
-                // 滚完等一下（防止滚动动画导致点击坐标不对）
-            } catch (eScrAll) {}
-
-            // ============ 🔴✅ 点击策略：3 种点击方式依次来，间隔 400ms，每试完一种看 1500ms 内有没有弹窗；只要弹了立即跳出 ============
-            var clickedIndex = -1;
-            var modalAppeared = false;
-
-            function tryClickOnceAndWait(idx, nextFn) {
-                if (idx >= candidates.length || finished) { nextFn && nextFn(false); return; }
-                clickedIndex = idx;
-                var c = candidates[idx].el;
-                console.log('[content] 👆 尝试第' + (idx + 1) + '种点击: score=' + candidates[idx].score + ', 原因=' + candidates[idx].reason + ', txt=' + (candidates[idx].txt || '').slice(0, 50));
-                try {
-                    // 方式 A：原生 click()
-                    try { c.click(); } catch (eA) {
-                        // 方式 B：完整鼠标事件流 mousedown → focus → mouseup → click
-                        try {
-                            function fireEvt(el, name, evtCls, extra) {
-                                try {
-                                    var ev;
-                                    if (evtCls === 'mouse') {
-                                        ev = new MouseEvent(name, Object.assign({ bubbles: true, cancelable: true, view: window, button: 0, which: 1, clientX: 100, clientY: 100 }, extra || {}));
-                                    } else if (evtCls === 'pointer') {
-                                        try { ev = new PointerEvent(name, Object.assign({ bubbles: true, cancelable: true, view: window, pointerId: 1, pointerType: 'mouse', button: 0, clientX: 100, clientY: 100 }, extra || {})); }
-                                        catch (ePE) { return; }
-                                    } else {
-                                        ev = document.createEvent('Events'); ev.initEvent(name, true, true);
-                                        Object.assign(ev, extra || {});
-                                    }
-                                    el.dispatchEvent(ev);
-                                } catch (err) {}
-                            }
-                            fireEvt(c, 'pointerover', 'pointer');
-                            fireEvt(c, 'mouseenter', 'mouse');
-                            fireEvt(c, 'pointerenter', 'pointer');
-                            fireEvt(c, 'mousemove', 'mouse');
-                            fireEvt(c, 'pointermove', 'pointer');
-                            fireEvt(c, 'mousedown', 'mouse');
-                            fireEvt(c, 'pointerdown', 'pointer');
-                            fireEvt(c, 'focus', 'event');
-                            fireEvt(c, 'mouseup', 'mouse');
-                            fireEvt(c, 'pointerup', 'pointer');
-                            fireEvt(c, 'click', 'mouse');
-                        } catch (eB) {
-                            // 方式 C：dispatchEvent + 坐标计算
-                            try {
-                                var rect = c.getBoundingClientRect();
-                                var cx = Math.floor(rect.left + rect.width / 2);
-                                var cy = Math.floor(rect.top + rect.height / 2);
-                                var evC = new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0, which: 1, clientX: cx, clientY: cy, screenX: cx, screenY: cy });
-                                c.dispatchEvent(evC);
-                            } catch (eC) {}
-                        }
-                    }
-                } catch (eAll) { console.warn('[content] 点击异常:', eAll); }
-
-                // 试完这种点击方式后，每 200ms 查一次弹窗有没有出现（最多等 1500ms）
-                var subWait = 0;
-                var subT = setInterval(function () {
-                    if (finished || modalAppeared) { clearInterval(subT); return; }
-                    subWait += 200;
-                    var maybeModal = _getCompleteModalRoot();
-                    if (maybeModal) {
-                        modalAppeared = true;
-                        clearInterval(subT);
-                        console.log('[content] ✨ 点击第' + (idx + 1) + '种后' + subWait + 'ms 弹窗出现！开始提取...');
-                        // 弹窗出来了，等 1500ms 再提
-                        setTimeout(function () {
-                            tryExtractFromFoundModal(maybeModal);
-                        }, 1600);
-                    } else if (subWait >= 1500) {
-                        clearInterval(subT);
-                        if (finished || modalAppeared) return;
-                        // 这种没弹出来 → 下一种点击
-                        tryClickOnceAndWait(idx + 1, nextFn);
-                    }
-                }, 200);
-            }
-
-            function tryExtractFromFoundModal(modEl) {
-                try {
-                    if (finished) return;
-                    modalEl = modEl || _getCompleteModalRoot();
-                    if (!modalEl) {
-                        setTimeout(function () {
-                            if (finished) return;
-                            var lastTry = _getCompleteModalRoot();
-                            if (!lastTry) { done(false, {}, '弹窗内容渲染失败'); return; }
-                            var extLast = _extractCompleteBasicFromModal(lastTry);
-                            done(true, extLast, '');
-                        }, 1200);
-                        return;
-                    }
-                    var extracted = _extractCompleteBasicFromModal(modalEl);
-                    var fc = Object.keys(extracted).length;
-                    console.log('[content] ✅ 竣工验收备案弹窗提取完成，字段数=' + fc, extracted);
-                    if (fc < 3) {
-                        setTimeout(function () {
-                            try {
-                                if (finished) return;
-                                var extracted2 = _extractCompleteBasicFromModal(_getCompleteModalRoot());
-                                var fc2 = Object.keys(extracted2).length;
-                                console.log('[content]  二次提取字段数=' + fc2, extracted2);
-                                done(true, (fc2 > fc ? extracted2 : extracted), '');
-                            } catch (eSec) { done(true, extracted, '二次提取异常(已用首次)'); }
-                        }, 2500);
-                    } else {
-                        done(true, extracted, '');
-                    }
-                } catch (eEx) {
-                    done(false, {}, '提取异常:' + (eEx.message || eEx));
-                }
-            }
-
-            function afterAllClicksFail() {
-                // ============ 🔴 所有点击方式都没弹出 → 轮询查 22s（有时弹窗延迟很夸张） ============
-                console.log('[content] ⏳ 所有点击方式试完都没立刻弹，开始 22s 轮询查弹窗...');
-                waited = 0;
-                tCheck = setInterval(function () {
-                    try {
-                        if (finished) { if (tCheck) clearInterval(tCheck); return; }
-                        waited += 300;
-                        var m = _getCompleteModalRoot();
-                        if (m) {
-                            clearInterval(tCheck); tCheck = null;
-                            console.log('[content] ✨ 轮询第' + (waited / 300).toFixed(0) + '次时终于等到弹窗！');
-                            setTimeout(function () { tryExtractFromFoundModal(m); }, 1400);
-                            return;
-                        }
-                        if (waited >= maxWait) {
-                            clearInterval(tCheck); tCheck = null;
-                            // ============ 🔴✅ 终极兜底：把整个 document.body 当前文本dump出来，找包含 recordNo + 实际造价/结构体系 的最近文本块
-                            // 如果能找到结构体系=xx、实际造价=xx 这种 key=value，也能救回来！
-                            console.warn('[content] ⚠️ 25s 都没找到弹窗 DOM，开始终极文本兜底提取...');
-                            var rescued = _rescueExtractFromBodyText(loc);
-                            var fcR = Object.keys(rescued).length;
-                            console.log('[content] 🛟 文本兜底提取到字段数=' + fcR, rescued);
-                            if (fcR >= 3) done(true, rescued, '文本兜底成功(没找到弹窗DOM但从body文本解析到)');
-                            else done(false, {}, '弹窗未出现，文本兜底也没解析到足够字段(' + fcR + '个)');
-                            return;
-                        }
-                    } catch (eInt) { console.error('[content] 轮询异常:', eInt); }
-                }, 300);
-            }
-
-            // 开始！第 0 种点击
-            setTimeout(function () { tryClickOnceAndWait(0, afterAllClicksFail); }, 250);
-        } catch (e) {
-            done(false, {}, '外层异常: ' + (e.message || e));
-        }
+        try { cb({ success: false, data: {}, error: '仿真点击已弃用', via: 'deprecated' }); }
+        catch (ecb) {}
     }
-
-    // 🔴✅ 终极兜底：没找到弹窗 DOM 时，从 document.body 的文本里根据 recordNo 关键词位置找 结构体系/实际造价 等字段
-    function _rescueExtractFromBodyText(loc) {
-        var out = {};
-        try {
-            var full = (document.body ? (document.body.innerText || '') : '').replace(/\r/g, '');
-            if (!full) return out;
-            var anchorTxt = '';
-            if (loc && loc.recordNo) anchorTxt = (loc.recordNo + '').trim();
-            if (loc && loc.projectName && !anchorTxt) anchorTxt = (loc.projectName + '').slice(0, 10);
-            var startIdx = 0;
-            if (anchorTxt) {
-                var ai = full.indexOf(anchorTxt);
-                if (ai !== -1) startIdx = Math.max(0, ai - 500);
-            }
-            var near = full.slice(startIdx, startIdx + 5000);
-
-            var rules = [
-                { out: '省级竣工验收备案编号', keys: ['省级竣工验收备案编号'], nextLen: 50 },
-                { out: '竣工验收备案编号', keys: ['竣工验收备案编号'], nextLen: 60, skipIfStartsWith: '省级' },
-                { out: '备案机关', keys: ['备案机关'], nextLen: 80 },
-                { out: '结构体系', keys: ['结构体系'], nextLen: 30 },
-                {
-                    out: '实际造价（万元）',
-                    keys: ['实际造价（万元）', '实际造价(万元)', '实际造价', '工程总造价（万元）', '工程总造价(万元)', '工程总造价', '总造价（万元）', '总造价(万元)', '总造价', '竣工造价', '结算造价', '合同造价', '实际总造价', '工程实际造价'],
-                    nextLen: 40, numLike: true
-                },
-                {
-                    out: '实际面积（平方米）',
-                    keys: ['实际面积（平方米）', '实际面积(平方米)', '实际面积', '实际建筑面积', '建筑面积', '总建筑面积', '实际面积 ㎡', '实际面积 m²'],
-                    nextLen: 40, numLike: true
-                },
-                { out: '实际开工日期', keys: ['实际开工日期'], nextLen: 30, dateLike: true },
-                { out: '实际竣工日期', keys: ['实际竣工日期'], nextLen: 30, dateLike: true },
-                { out: '数据等级', keys: ['数据等级'], nextLen: 10, allowVal: ['A','B','C','D'] }
-            ];
-
-            for (var r = 0; r < rules.length; r++) {
-                var rule = rules[r];
-                for (var k = 0; k < rule.keys.length; k++) {
-                    var key = rule.keys[k];
-                    var fi = near.indexOf(key);
-                    if (fi === -1) continue;
-                    if (rule.skipIfStartsWith && fi > 6 && near.slice(fi - rule.skipIfStartsWith.length, fi) === rule.skipIfStartsWith) continue;
-                    var rest = near.slice(fi + key.length, fi + key.length + (rule.nextLen || 60));
-                    rest = rest.replace(/^[\s:：\t\n\r]+/, '').trim();
-                    // 去掉下一个字段 key
-                    for (var rk = 0; rk < rules.length; rk++) {
-                        for (var kk = 0; kk < rules[rk].keys.length; kk++) {
-                            var otherK = rules[rk].keys[kk];
-                            if (otherK === key) continue;
-                            var oi = rest.indexOf(otherK);
-                            if (oi > 0) rest = rest.slice(0, oi);
-                        }
-                    }
-                    rest = rest.split(/[\n\r\t]/)[0].trim();
-                    if (rule.numLike) {
-                        var m = rest.match(/[\d]+(?:\.[\d]+)?/);
-                        if (m) rest = m[0];
-                    }
-                    if (rule.dateLike) {
-                        var md = rest.match(/\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2}/);
-                        if (md) rest = md[0];
-                    }
-                    if (rule.allowVal) {
-                        var matchedAllow = null;
-                        for (var av = 0; av < rule.allowVal.length; av++) {
-                            if (rest.indexOf(rule.allowVal[av]) !== -1) { matchedAllow = rule.allowVal[av]; break; }
-                        }
-                        if (matchedAllow) rest = matchedAllow;
-                    }
-                    if (rest && !out[rule.out]) {
-                        out[rule.out] = rest.replace(/[:：]$/, '').trim();
-                        break;
-                    }
-                }
-            }
-        } catch (e) { console.error('[content] 文本兜底提取异常:', e); }
-        return out;
-    }
+    // 🔴 终极文本兜底：已完全弃用
+    function _rescueExtractFromBodyText(loc) { return {}; }
 
     // =========================================================================
-    // ===== 🔴✅ 方案一：纯接口 fetch 拿 JSON（0 干扰，不弹不跳转）==============
+    // ===== 纯接口 fetch 拿 JSON（0 干扰，不弹不跳转）==============
     // =========================================================================
     var API_TEMPLATES = {
         basic:    { method: 'GET',  urlTpl: '/api/openplatform/project/getByPrjCode/{code}',                    paramIn: 'path' },
@@ -3180,15 +3420,104 @@
     function mapBasicFromApi(rawJson, listLevel) {
         try {
             var data = (rawJson && rawJson.data !== undefined) ? rawJson.data : rawJson;
+            var out = {};
+
+            // 🔴✅✅✅ 【建设单位 / 组织机构代码 专门解析】—— 解决之前"基本信息建设单位全空"的根因：
+            //   后端 basic 详情的真实结构是 data.buildUnit = [{orgTypeId, orgName, orgCode}, ...]（对象数组）
+            //   _buildApiReverseIndex 把 buildUnit.0.orgName / buildUnit.1.orgName / ... 的 shortKey=orgName 全部冲突，
+            //   idx['orgname'] 只会保留最先出现的那一个；如果数组里第一个不是 orgTypeId=1（建设单位），就会命中到勘察/设计/施工单位的名字，或者空值。
+            //   解决：直接遍历原始 data 里所有数组字段（buildUnit / orgList / unitList / units / projectOrgs 等常见命名），按 orgTypeId==1 过滤后拼接。
+            (function () {
+                try {
+                    var ARRAY_KEYS_TO_LOOK = ['buildUnit','orgList','unitList','units','projectOrgs','projectUnits','orgs','buildUnits','constructUnits','deptList','organizations','orgInfos','participants'];
+                    var _names = [];
+                    var _codes = [];
+                    function scanOneArray(arr) {
+                        if (!Array.isArray(arr) || arr.length === 0) return;
+                        for (var i = 0; i < arr.length; i++) {
+                            var it = arr[i];
+                            if (!it || typeof it !== 'object') continue;
+                            var tid = it['orgTypeId'] !== undefined ? Number(it['orgTypeId']) : NaN;
+                            var oname = it['orgName'] !== undefined && it['orgName'] !== null ? String(it['orgName']).trim() : '';
+                            var ocode = it['orgCode'] !== undefined && it['orgCode'] !== null ? String(it['orgCode']).trim() : '';
+                            var wantIt = false;
+                            if (tid === 1) wantIt = true;
+                            if (!wantIt) {
+                                try {
+                                    var keys = Object.keys(it);
+                                    for (var kk = 0; kk < keys.length; kk++) {
+                                        var kn = String(keys[kk] || '').toLowerCase();
+                                        if (kn === 'buildunittype' || kn === 'orgtypename' || kn === 'orgrole' || kn === 'type') {
+                                            var tv = String(it[keys[kk]] || '').toLowerCase();
+                                            if (tv && (tv.indexOf('建设') !== -1 || tv.indexOf('业主') !== -1 || tv.indexOf('建单') !== -1 || tv === '1' || tv === 'owner' || tv === 'build')) { wantIt = true; break; }
+                                        }
+                                    }
+                                } catch (eK) {}
+                            }
+                            if (arr.length === 1 && !wantIt && oname) wantIt = true;
+                            if (wantIt) {
+                                if (oname && _names.indexOf(oname) === -1) _names.push(oname);
+                                if (ocode && _codes.indexOf(ocode) === -1) _codes.push(ocode);
+                            }
+                        }
+                    }
+                    function walk(obj) {
+                        if (!obj || typeof obj !== 'object') return;
+                        if (Array.isArray(obj)) {
+                            var _matchName = false;
+                            try {
+                                for (var ci = 0; ci < Math.min(obj.length, 5); ci++) {
+                                    if (obj[ci] && typeof obj[ci] === 'object' && ('orgName' in obj[ci] || 'orgTypeId' in obj[ci] || 'orgCode' in obj[ci])) { _matchName = true; break; }
+                                }
+                            } catch (eMN) {}
+                            if (_matchName) scanOneArray(obj);
+                            return;
+                        }
+                        var ks = Object.keys(obj);
+                        for (var ki = 0; ki < ks.length; ki++) {
+                            var k = ks[ki];
+                            if (k === '__v' || k === '_raw') continue;
+                            var v = obj[k];
+                            if (v && typeof v === 'object') {
+                                if (ARRAY_KEYS_TO_LOOK.indexOf(k) !== -1 && Array.isArray(v)) scanOneArray(v);
+                                walk(v);
+                            }
+                        }
+                    }
+                    walk(data);
+                    try {
+                        var tks = Object.keys(data || {});
+                        for (var tki = 0; tki < tks.length; tki++) {
+                            var tk = tks[tki];
+                            if (!tk) continue;
+                            var ntk = String(tk).toLowerCase();
+                            if ((ntk.indexOf('build') === 0 || ntk.indexOf('unit') !== -1 || ntk.indexOf('org') !== -1 || ntk.indexOf('dept') !== -1) && Array.isArray(data[tk])) scanOneArray(data[tk]);
+                        }
+                    } catch (eTK) {}
+                    mapBasicFromApi._lastBuildNames = _names.slice();
+                    mapBasicFromApi._lastBuildCodes = _codes.slice();
+                    out['建设单位'] = _names.length > 0 ? _names.join('、') : '';
+                    out['组织机构代码'] = _codes.length > 0 ? _codes.join('、') : '';
+                } catch (eBigOrg) {
+                    console.warn('[api] basic buildUnit 扫描失败:', eBigOrg);
+                    out['建设单位'] = '';
+                    out['组织机构代码'] = '';
+                }
+            })();
+
             var flat = _flattenObject(data);
             var idx = _buildApiReverseIndex(flat);
             console.log('[api] 🟢 basic 接口扁平化索引 (部分):', Object.keys(idx).slice(0, 40), '共字段数=' + Object.keys(idx).length);
-            var out = {};
+            try {
+                if (mapBasicFromApi._lastBuildNames) console.log('[api] 🟢 basic 建设单位数组扫描命中 orgTypeId==1: name=[' + mapBasicFromApi._lastBuildNames.join('|') + '], code=[' + (mapBasicFromApi._lastBuildCodes||[]).join('|') + ']');
+            } catch (eLg) {}
             out['项目名称'] = _pickByKeywords(idx, ['项目名称', 'projectName', 'prjName', 'prjname', 'name', 'projecttitle', 'prjTitle', 'title'], true);
             out['省级项目编号'] = _pickByKeywords(idx, ['省级项目编号', '项目编号', 'projectCode', 'prjCode', 'prjcode', 'code', 'projectNo', 'prjNo', 'projectID', 'projectcode'], true);
-            // 🔴✅ 建设单位：后端是 buildUnit[{orgTypeId:1,orgName:"xxx",orgCode:"xxx"}]，扁平化后是 buildUnit.0.orgName（shortKey=orgName），务必加 orgName！
-            out['建设单位'] = _pickByKeywords(idx, ['建设单位', '建设单位名称', '建设方', '业主单位', '业主', 'buildDept', 'buildUnit', 'builddept', 'constructionUnitName', 'buildCompany', 'buildUnitName', 'ownerUnit', 'ownerName', 'orgName', 'buildOrgName', 'owner'], true);
-            out['组织机构代码'] = _pickByKeywords(idx, ['组织机构代码', '统一社会信用代码', 'organizationCode', 'orgCode', 'socialCreditCode', 'creditCode', 'buildUnitOrgCode', 'orgCodeUnify', 'unifiedCreditCode'], true);
+            // 建设单位/组织机构代码：以【数组按 orgTypeId==1 扫描】为主，_pickByKeywords 只做兜底（不覆盖已有值）
+            var _tmpBuildUnit = out['建设单位'] || _pickByKeywords(idx, ['建设单位', '建设单位名称', '建设方', '业主单位', '业主', 'buildDept', 'buildUnit', 'builddept', 'constructionUnitName', 'buildCompany', 'buildUnitName', 'ownerUnit', 'ownerName', 'orgName', 'buildOrgName', 'owner'], true);
+            out['建设单位'] = _tmpBuildUnit || '';
+            var _tmpOrgCode = out['组织机构代码'] || _pickByKeywords(idx, ['组织机构代码', '统一社会信用代码', 'organizationCode', 'orgCode', 'socialCreditCode', 'creditCode', 'buildUnitOrgCode', 'orgCodeUnify', 'unifiedCreditCode'], true);
+            out['组织机构代码'] = _tmpOrgCode || '';
             // 🔴✅ 项目分类：后端字段名是 projectClass，之前漏了
             out['项目分类'] = _pickByKeywords(idx, ['项目分类', 'projClassify', 'projType', 'projectType', 'projectClassify', 'projectCategory', 'projectClass', 'projClass', 'classify', 'category', 'projectKind'], true);
             out['国家标准行业'] = _pickByKeywords(idx, ['国家标准行业', '所属行业', '行业', 'industry', 'nationalStandardIndustry', 'industryType', 'industryName', 'gbIndustry', 'trade', 'businessType'], true);
@@ -3219,6 +3548,9 @@
             out['建设地点省'] = province;
             out['建设地点市'] = city;
             out['建设地点区县'] = division;
+            // ✅ 所在市：= city（用户明确：列表里就能找到的单字段，就是这个）
+            out['所在市'] = city || '';
+            // ✅ 项目所在地：= province + city + division 拼接而成（用户明确：详情页里才有，需要三段拼接）
             out['项目所在地'] = normText((province || '') + (city || '') + (division || ''));
             // 🔴✅ DOM版字段6：详细地址 → 对应 address（之前漏了）
             out['详细地址'] = detailAddr;
@@ -3316,8 +3648,25 @@
             }
             // 17. 建设性质 → constructNature
             out['建设性质'] = _pickByKeywords(idx, ['constructNature', 'constructnature', '建设性质', '性质', 'nature', 'buildNature', 'projectNature', 'constructionNature', 'natureType', 'projectProperty', 'buildProperty', 'constructnature', 'natureofconstruction'], true);
-            // 18. 合同工期（先取直接字段；如果没取到，用 合同竣工日期-合同开工日期 自动推算天数！之前没推算！）
-            var _duration = _pickByKeywords(idx, ['contractDuration', 'contractduration', 'planDays', 'plandays', 'durationDays', 'durationMonths', '计划工期', '合同工期', '工期', '施工工期', 'projectDuration', 'constructDuration', 'buildDuration', 'duration', 'totaldays', 'totalduration', 'contractperiod', 'constructionperiod'], true);
+            // 18. 合同工期：优先使用 beginDate ～ endDate（与网站展示一致，如 "2026-04-23 ～ 2026-12-31"）
+            //     如果没有 beginDate/endDate，再尝试直接取合同工期字段；最后兜底用日期差推算天数
+            var _duration = '';
+            try {
+                var _bd = _pickDateByKeywords(idx, ['beginDate', 'begindate', 'beginTime', '合同开工日期', '计划开工日期', '开工日期', 'contractStartDate', 'startDate', 'commenceDate', 'constructStartDate', 'planBeginDate', 'planStartDate', 'startdate']);
+                var _ed = _pickDateByKeywords(idx, ['endDate', 'enddate', 'endTime', '合同竣工日期', '计划竣工日期', '计划完工日期', '竣工日期', 'contractEndDate', 'completeDate', 'finishDate', 'completionDate', 'constructEndDate', 'planCompleteDate', 'finishdate']);
+                if (_bd && _ed) {
+                    var _fmtBd = String(_bd || '').replace(/\s.*$/, '').trim();
+                    var _fmtEd = String(_ed || '').replace(/\s.*$/, '').trim();
+                    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(_fmtBd) && /^\d{4}-\d{1,2}-\d{1,2}$/.test(_fmtEd)) {
+                        function padZero(n) { var s = String(n); return s.length === 1 ? '0' + s : s; }
+                        var bp = _fmtBd.split('-'), ep = _fmtEd.split('-');
+                        _duration = bp[0] + '-' + padZero(bp[1]) + '-' + padZero(bp[2]) + ' ～ ' + ep[0] + '-' + padZero(ep[1]) + '-' + padZero(ep[2]);
+                    }
+                }
+            } catch (eRangeFmt) {}
+            if (!_duration || _duration === '') {
+                _duration = _pickByKeywords(idx, ['contractDuration', 'contractduration', 'planDays', 'plandays', 'durationDays', 'durationMonths', '计划工期', '合同工期', '工期', '施工工期', 'projectDuration', 'constructDuration', 'buildDuration', 'duration', 'totaldays', 'totalduration', 'contractperiod', 'constructionperiod'], true);
+            }
             if (!_duration || _duration === '') {
                 try {
                     var _s = _pickDateByKeywords(idx, ['begindate', '合同开工日期', '计划开工日期', '开工日期', 'contractStartDate', 'startDate', 'beginDate', 'commenceDate', 'constructStartDate', 'planBeginDate', 'planStartDate', 'startdate']);
@@ -3345,8 +3694,9 @@
             out['建设地址'] = _pickByKeywords(idx, ['constructAddress', 'constructaddress', '建设地址', '工程地址', '地址', 'address', 'buildAddress', 'projectAddress', 'constructionAddress', 'siteAddress', 'location', 'projectSite', 'constructaddress', 'site', 'addressofconstruction', 'worksite'], true);
             // 24. 施工单位项目负责人 → buildManager（注意：接口里实际有 constructManager 是建设单位负责人！别搞混了！）
             out['施工单位项目负责人'] = _pickByKeywords(idx, ['buildManager', 'buildmanager', '施工单位项目负责人', '施工项目经理', '项目经理', '项目负责人', '施工负责人', 'projectManager', 'contractorManager', 'buildProjectManager', 'pmName', 'builderManager', 'buildmanager', 'constructionmanager', 'siteManager'], true);
-            // 25. 项目经理注册号（身份证号/注册号，buildManagerId）
-            out['项目经理注册号'] = _pickByKeywords(idx, ['项目经理注册号', '项目经理证号', '项目经理身份证号', '项目经理资格证号', 'projectManagerId', 'pmId', 'buildManagerId', 'constructManagerId', 'pmRegNo', 'buildmanagerid', 'pmpid', 'projectmanagerid'], true);
+            // 🔴✅ 用户明确不需要「项目经理注册号」，跳过（即使详情里有也不写入输出行）
+            // 25. 项目经理注册号（身份证号/注册号，buildManagerId）—— 已停用
+            // out['项目经理注册号'] = _pickByKeywords(idx, ['项目经理注册号', '项目经理证号', '项目经理身份证号', '项目经理资格证号', 'projectManagerId', 'pmId', 'buildManagerId', 'constructManagerId', 'pmRegNo', 'buildmanagerid', 'pmpid', 'projectmanagerid'], true);
             // 26. 总监理工程师 → supervisorManager（扩充关键词，可能名字叫什么都有！）
             out['总监理工程师'] = _pickByKeywords(idx, ['supervisor', 'supervisorid', 'supervisorManager', 'supervisormanager', '总监理工程师', '总监', '监理工程师', '总监工程师', 'chiefSupervisionEngineer', 'supervisorChief', 'chiefSupervisor', 'supervisionEngineer', 'supervisionManager', 'supervisingEngineer', 'supervisionChief', 'supervisionManagerName', 'supervisorEngineer', 'chiefEngineerSupervision', 'supervisionDirector', 'directorOfSupervision'], true);
             // 27. 建设单位项目负责人 → constructManager（之前搞错了，constructManager 才是建设单位负责人！）
@@ -3419,7 +3769,8 @@
             out['勘察设计单位'] = _pickByKeywords(idx, ['勘察设计单位', '勘察设计', 'surveyDesignUnit', 'surveyAndDesignOrg'], true);
             // 五方项目负责人
             out['施工单位项目负责人'] = _pickByKeywords(idx, ['buildManager', 'buildmanager', '施工单位项目负责人', '施工项目经理', '项目经理', '项目负责人', '施工负责人', 'projectManager', 'contractorManager', 'buildProjectManager', 'pmName', 'buildmanager', 'constructionmanager'], true);
-            out['项目经理注册号'] = _pickByKeywords(idx, ['项目经理注册号', '项目经理证号', '项目经理身份证号', '项目经理资格证号', 'projectManagerId', 'pmId', 'buildManagerId', 'buildmanagerid', 'constructManagerId', 'pmRegNo'], true);
+            // 🔴✅ 用户明确不需要「项目经理注册号」，跳过（即使 basic 详情里有也不写入输出行）
+            // out['项目经理注册号'] = _pickByKeywords(idx, ['项目经理注册号', '项目经理证号', '项目经理身份证号', '项目经理资格证号', 'projectManagerId', 'pmId', 'buildManagerId', 'buildmanagerid', 'constructManagerId', 'pmRegNo'], true);
             out['建设单位项目负责人'] = _pickByKeywords(idx, ['constructManager', 'constructmanager', '建设单位项目负责人', '建设单位负责人', '甲方负责人', '甲方项目经理', '业主项目负责人', 'ownerManager', 'constructProjectManager', 'buildOwnerManager', 'constructmanager', 'ownermanager', 'clientmanager'], true);
             out['总监理工程师'] = _pickByKeywords(idx, ['supervisor', 'supervisorid', 'supervisorManager', 'supervisormanager', '总监理工程师', '总监', '监理工程师', '总监工程师', 'supervisionManager', 'supervisionEngineer', 'chiefSupervisor', 'supervisionDirector', 'supervisionManagerName', 'chiefSupervisionEngineer', 'supervisorChief', 'supervisorengineer', 'supervisingEngineer'], true);
             out['勘察单位项目负责人'] = _pickByKeywords(idx, ['prospectingManager', 'prospectingmanager', '勘察单位项目负责人', '勘察项目负责人', '勘察负责人', 'surveyManager', 'prospectManager', 'investigationManager', 'prospectingmanager', 'surveymanager'], true);
@@ -3677,20 +4028,11 @@
                 return true;
             }
 
-            // ===== 🔴✅ 竣工验收备案：在列表页点击行→弹对话框→提取基本信息（不开新 tab！）=====
-            if (message.action === 'extractCompleteModal') {
-                console.log('[content] 🎯 收到 extractCompleteModal: rowIndex=' + message.rowIndex + ', locator=', message.locator || {});
-                clickCompleteRowAndExtractModal(message.rowIndex || 0, message.locator || {}, function (res) {
-                    try { sendResponse(res); } catch (e) { console.warn('[content] sendResponse fail:', e); }
-                });
-                return true; // 必须异步，所以 return true
-            }
-
-            // ===== 🔴✅ 方案一：纯接口 fetch 拿详情 JSON（0 干扰，不开 tab，不弹 Modal）=====
+            // 纯接口 fetch 拿详情 JSON（0 干扰，不开 tab，不弹 Modal）
             if (message.action === 'fetchDetail') {
                 (async function () {
                     try {
-                        console.log('[content] 🎯 收到 fetchDetail: type=' + message.type + ', code=' + message.code + ', extra=', message.extra || {});
+                        console.log('[content] 🎯 收到 fetchDetail: type=' + message.type + ', code=' + message.code);
                         var res = await fetchDetailFromApi(message.type, message.code, message.extra || {});
                         try { sendResponse({ success: res.success, data: res.data || {}, fieldCount: res.fieldCount || 0, error: res.error || '', via: 'api-fetch' }); }
                         catch (e) { console.warn('[content] fetchDetail sendResponse fail:', e); }
@@ -3698,100 +4040,562 @@
                         try { sendResponse({ success: false, data: {}, fieldCount: 0, error: String(bigE && bigE.message || bigE) }); } catch (e) {}
                     }
                 })();
+                return true;
+            }
+
+            // 🔴天眼查补全：在 pro.tianyancha.com 域名下执行「suggest→选公司→详情页5字段解析」
+            //    返回 { success, data: { companyName(匹配到的实际全名), creditCode(统一社会信用代码), phone, legalPerson(法人), address, establishDate }, error, companyId }
+            if (message.action === 'queryTianyancha') {
+                (async function () {
+                    try {
+                        var queryName = String(message.companyName || '').trim();
+                        var matchMode = String(message.matchMode || 'smart').trim();
+                        if (!queryName) { try { sendResponse({ success: false, error: 'queryName 空' }); } catch (e) {} return; }
+                        // 不在天眼查域名，拒绝执行（避免跨域/误伤）
+                        var host = (window.location.hostname || '').toLowerCase();
+                        if (host.indexOf('tianyancha.com') === -1) {
+                            try { sendResponse({ success: false, error: '当前页非天眼查域名(host=' + host + ')' }); } catch (e) {} return;
+                        }
+                        // ========== Step 1: suggest.json 自动补全（带 HTTP 状态校验 + 1 次重试，应对天眼查临时 403/风控）==========
+                        var origin2 = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || 'https://pro.tianyancha.com';
+                        var ts = Date.now();
+                        var suggestUrl = origin2 + '/fd-search/search/company/suggest.json?key=' + encodeURIComponent(queryName) + '&_=' + ts;
+                        var suggestJson = null;
+                        var suggestHttpStatus = 0;
+                        var suggestRawText = '';
+                        var suggestErr = '';
+                        var SG_MAX_RETRY = 1; // 总共 1 + SG_MAX_RETRY = 2 次
+                        for (var sgAttempt = 0; sgAttempt <= SG_MAX_RETRY; sgAttempt++) {
+                            try {
+                                if (sgAttempt > 0) {
+                                    await new Promise(function (rsSG) { setTimeout(rsSG, 900 + Math.floor(Math.random() * 700)); });
+                                }
+                                var sgText = await new Promise(function (rs, rj) {
+                                    try {
+                                        var x = new XMLHttpRequest();
+                                        x.open('GET', suggestUrl + (sgAttempt > 0 ? ('&__r=' + sgAttempt) : ''), true);
+                                        x.withCredentials = true;
+                                        x.setRequestHeader('Accept', 'application/json, text/plain, */*');
+                                        x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                                        x.onload = function () {
+                                            suggestHttpStatus = x.status || 0;
+                                            if (suggestHttpStatus >= 200 && suggestHttpStatus < 400) {
+                                                rs(x.responseText || '');
+                                            } else {
+                                                var prev = String(x.responseText || '').replace(/\s+/g, ' ').slice(0, 120);
+                                                rj(new Error('suggest HTTP ' + suggestHttpStatus + (prev ? (' | ' + prev) : '')));
+                                            }
+                                        };
+                                        x.onerror = function () { rj(new Error('suggest xhr onerror (CORS/风控/网络拦截)')); };
+                                        x.timeout = 18000;
+                                        x.ontimeout = function () { rj(new Error('suggest xhr timeout')); };
+                                        x.send(null);
+                                    } catch (eInr) { rj(eInr); }
+                                });
+                                suggestRawText = String(sgText || '').slice(0, 200);
+                                try {
+                                    suggestJson = JSON.parse(sgText || '{}');
+                                    suggestErr = '';
+                                    break; // 成功跳出
+                                } catch (ep) {
+                                    suggestErr = 'suggest parse fail: ' + (ep && ep.message || String(ep));
+                                    suggestJson = null;
+                                    // 解析失败 → 重试也没意义（格式不对），直接跳出循环用后面的 DOM/搜索页兜底
+                                    break;
+                                }
+                            } catch (eSug) {
+                                suggestErr = String(eSug && eSug.message || eSug);
+                                // 最后一次失败，保留错误；否则继续重试
+                                if (sgAttempt === SG_MAX_RETRY) {
+                                    suggestJson = null;
+                                } else {
+                                    // 重试前清空，防止污染
+                                    suggestJson = null;
+                                    suggestRawText = '';
+                                }
+                            }
+                        }
+                        // 从 suggest 响应里抽 [{id, name}] 数组
+                        var candidates = [];
+                        (function pullCandidates(obj) {
+                            try {
+                                if (!obj || typeof obj !== 'object') return;
+                                if (Array.isArray(obj)) { for (var ai2 = 0; ai2 < obj.length; ai2++) pullCandidates(obj[ai2]); return; }
+                                var hasId = (obj.id || obj._id || obj.companyId || obj.data_id) !== undefined && (obj.id || obj._id || obj.companyId || obj.data_id) !== null && String(obj.id || obj._id || obj.companyId || obj.data_id) !== '';
+                                var hasName = (obj.name || obj.companyName || obj.title || obj.js_text || obj.text || obj['js-text']) !== undefined;
+                                if (hasId && hasName) {
+                                    var cid = String(obj.id || obj._id || obj.companyId || obj.data_id || '').trim();
+                                    var cname = String(obj.name || obj.companyName || obj.title || obj.js_text || obj.text || obj['js-text'] || '').trim();
+                                    if (cid && cname && candidates.every(function (c) { return c.id !== cid; })) {
+                                        try { cname = cname.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); } catch (eStrip) {}
+                                        candidates.push({ id: cid, name: cname });
+                                    }
+                                }
+                                var ks2 = Object.keys(obj);
+                                for (var ki2 = 0; ki2 < ks2.length; ki2++) pullCandidates(obj[ks2[ki2]]);
+                            } catch (ePull) {}
+                        })(suggestJson);
+                        // 如果 suggest.json 没捞到 → 兜底1：从当前 DOM 的下拉/历史抽；兜底2：天眼查搜索页 HTML 抓 companyId
+                        if (candidates.length === 0) {
+                            try {
+                                var lis = document.querySelectorAll('li.toPageLi, li[data_id]');
+                                for (var liI = 0; liI < Math.min(lis.length, 8); liI++) {
+                                    var li = lis[liI];
+                                    var did = String(li.getAttribute && li.getAttribute('data_id') ? li.getAttribute('data_id') : (li.dataset && li.dataset.id ? li.dataset.id : '') || '').trim();
+                                    var txt = (li.innerText || li.textContent || '').replace(/\s+/g, ' ').trim();
+                                    if (did && txt && candidates.every(function (c) { return c.id !== did; })) candidates.push({ id: did, name: txt });
+                                }
+                            } catch (eLis) {}
+                        }
+                        // 兜底2：fetch 天眼查搜索页，从搜索结果里抽 href="/company/{id}" 第一个结果（带 HTTP 校验 + 1 次重试）
+                        if (candidates.length === 0) {
+                            try {
+                                var SEARCH_MAX = 1;
+                                var searchHtml = '';
+                                var searchUrl = origin2 + '/search?key=' + encodeURIComponent(queryName);
+                                for (var sa = 0; sa <= SEARCH_MAX; sa++) {
+                                    try {
+                                        if (sa > 0) await new Promise(function (rss) { setTimeout(rss, 1100 + Math.floor(Math.random() * 700)); });
+                                        var oneSh = await new Promise(function (rs2, rj2) {
+                                            try {
+                                                var sxp = new XMLHttpRequest();
+                                                sxp.open('GET', searchUrl + (sa > 0 ? ('&__r=' + sa) : ''), true);
+                                                sxp.withCredentials = true;
+                                                sxp.setRequestHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+                                                sxp.timeout = 22000;
+                                                sxp.onload = function () {
+                                                    var ss = sxp.status || 0;
+                                                    if (ss >= 200 && ss < 400) { rs2(sxp.responseText || ''); }
+                                                    else { rj2(new Error('search HTTP ' + ss)); }
+                                                };
+                                                sxp.onerror = function () { rj2(new Error('search xhr onerror')); };
+                                                sxp.ontimeout = function () { rj2(new Error('search xhr timeout')); };
+                                                sxp.send(null);
+                                            } catch (e) { rj2(e); }
+                                        });
+                                        if (oneSh && oneSh.length > 2000) { // 太短的 HTML 可能是风控页/跳转页
+                                            searchHtml = oneSh;
+                                            break;
+                                        }
+                                    } catch (eSearchAt) {
+                                        // 搜索页本次尝试失败，进入下一轮
+                                    }
+                                }
+                                if (searchHtml) {
+                                    var sp2 = new DOMParser();
+                                    var sdoc = sp2.parseFromString(searchHtml, 'text/html');
+                                    try {
+                                        var alinks = sdoc.querySelectorAll ? sdoc.querySelectorAll('a[href*="/company/"], a[href*="/business/"]') : [];
+                                        for (var ali = 0; ali < Math.min(alinks.length, 30); ali++) {
+                                            var hrefA = String(alinks[ali].getAttribute && alinks[ali].getAttribute('href') ? alinks[ali].getAttribute('href') : '').trim();
+                                            var mm = hrefA.match(/\/(?:company|business)\/(\d+)/);
+                                            if (mm) {
+                                                var tName = (alinks[ali].innerText || alinks[ali].textContent || '').replace(/\s+/g, ' ').trim();
+                                                if (!tName) tName = queryName;
+                                                var idA = mm[1];
+                                                if (idA && candidates.every(function (c) { return c.id !== idA; })) candidates.push({ id: idA, name: tName });
+                                            }
+                                        }
+                                    } catch (eparse) {}
+                                    // 正则兜底：搜索结果里直接出现 /company/12345
+                                    if (candidates.length === 0) {
+                                        var rids = searchHtml.match(/\/(?:company|business)\/(\d+)/g) || [];
+                                        var rnames = [];
+                                        try {
+                                            var mt;
+                                            var reAnchor = /<a[^>]+href=["']?\/(?:company|business)\/(\d+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
+                                            while ((mt = reAnchor.exec(searchHtml)) !== null) {
+                                                var plain = String(mt[2] || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+                                                rnames.push({ id: mt[1], name: plain || queryName });
+                                            }
+                                        } catch (e2) {}
+                                        for (var ki = 0; ki < rnames.length && candidates.length < 10; ki++) {
+                                            if (rnames[ki].id && rnames[ki].name && candidates.every(function (c) { return c.id !== rnames[ki].id; })) candidates.push(rnames[ki]);
+                                        }
+                                    }
+                                }
+                            } catch (eSearchFallback) {  }
+                        }
+                        // ========== Step 2: 按 matchMode 选一个候选 ==========
+                        function normCoName(s) { try { return String(s || '').toLowerCase().replace(/\s+/g,'').replace(/[（(].*?[)）]/g,'').replace(/[·・\-—_.,，。、:：；;！!？?"'""'`~@#$%^&*+=<>\\\/{}\[\]|]/g,''); } catch (e) { return String(s || ''); } }
+                        var chosen = null;
+                        var similarity = 0;
+                        var qN = normCoName(queryName);
+                        function calcSim(a, b) {
+                            if (!a || !b) return 0;
+                            if (a === b) return 1;
+                            if (a.indexOf(b) !== -1 || b.indexOf(a) !== -1) {
+                                var shorter = Math.min(a.length, b.length);
+                                var longer = Math.max(a.length, b.length);
+                                return longer ? (shorter / longer) : 0;
+                            }
+                            var same = 0;
+                            for (var ci = 0; ci < a.length; ci++) { if (b.indexOf(a.charAt(ci)) !== -1) same++; }
+                            return (a.length + b.length) ? (2 * same / (a.length + b.length)) : 0;
+                        }
+                        if (candidates.length > 0) {
+                            var bestI = -1, bestSim = 0;
+                            for (var ci3 = 0; ci3 < candidates.length; ci3++) {
+                                var cN = normCoName(candidates[ci3].name);
+                                var sim = calcSim(qN, cN);
+                                if (cN === qN) { chosen = candidates[ci3]; similarity = 1; break; }
+                                if (sim > bestSim) { bestSim = sim; bestI = ci3; }
+                            }
+                            if (!chosen && bestI !== -1) {
+                                if (matchMode === 'strict') {
+                                    // strict 模式必须完全相等，否则不选
+                                } else if (matchMode === 'first') {
+                                    chosen = candidates[0];
+                                    similarity = calcSim(qN, normCoName(candidates[0].name));
+                                } else {
+                                    // smart: 相似度 ≥0.7 才接受（否则用户可能搜索了"广州南沙开发建设"→ 但 suggest 里是另一家"南沙XX"，避免乱填）
+                                    if (bestSim >= 0.7) { chosen = candidates[bestI]; similarity = bestSim; }
+                                }
+                            }
+                        }
+                        // 仍没命中：fallback 到 queryName 本身直接当详情URL？不行，详情必须数字ID；只能失败返回
+                        if (!chosen) {
+                            var bestSimReported = bestSim || 0;
+                            var errDetail = '未命中候选列表(候选' + candidates.length + '条，matchMode=' + matchMode + '，bestSim=' + bestSimReported.toFixed(3) + '，suggestHttp=' + suggestHttpStatus + (suggestErr ? '，suggestErr=' + suggestErr : '') + (suggestRawText ? '，raw=' + JSON.stringify(suggestRawText) : '') + ')';
+                            try { sendResponse({ success: false, error: errDetail, candidatesCount: candidates.length, suggestHttpStatus: suggestHttpStatus, suggestErr: suggestErr, suggestRawText: suggestRawText, firstCandidateNames: (candidates.slice(0, 5).map(function (c) { return c.name; })).join(' / ') }); } catch (e) {}
+                            return;
+                        }
+                        var companyId = String(chosen.id || '').trim();
+                        var matchedName = chosen.name || '';
+                        // ========== Step 3: 取详情（两种方式：A. 已有 header 在当前页直接抓 /company/{id} 详情 JSON；B. fetch 详情页 HTML + DOM 解析） ==========
+                        function parseDetailFromHtml(htmlStr) {
+                            var out = { creditCode: '', phone: '', legalPerson: '', address: '', establishDate: '' };
+                            function sanitizeLegalPerson(raw) {
+                                try {
+                                    var s = String(raw || '').replace(/\s+/g, ' ').trim();
+                                    if (!s) return '';
+                                    // 清除天眼查法人字段常见冗余尾部：
+                                    //   「复制」「关联企业12」「关联企业12复制」「关注TA」「私信」「 查看简历 」等
+                                    s = s.replace(/(复制|关注\s*T\s*A|私信|查看简历|企业名片|公司名片|工商信息|对外投资|任职信息|最新新闻|失信|被执行人|限制高消费|开庭公告|法院公告|裁判文书|行政处罚|环保处罚|税务违法|动产抵押|股权出质|网站备案|招聘|商标|专利|著作权|备案|年报|股东|主要人员|变更记录|公司热度|竞品|竞品公司)$/gi, '').trim();
+                                    // 反复清洗（可能存在"关联企业13复制"，一次尾部正则可能只打掉一半）
+                                    var keep = '';
+                                    for (var guard = 0; guard < 6 && keep !== s; guard++) {
+                                        keep = s;
+                                        // 「关联企业」+ 可选数字（含中文数字）+ 可选「复制/关注/私信 等」尾
+                                        s = s.replace(/(关联(?:企业|公司|机构|公司企业)?)\s*[0-9零〇一二三四五六七八九十百千万两壹贰叁肆伍陆柒捌玖拾佰仟]*\s*(复制|关注\s*T\s*A|私信|查看简历)?\s*$/gi, '').trim();
+                                        s = s.replace(/(复制|关注\s*T\s*A|私信|查看简历)$/gi, '').trim();
+                                    }
+                                    // 如果最后剩纯标点/空白或只有"法定代表人"等标签 → 清掉
+                                    s = s.replace(/^(法定代表人|法人|法定代表|负责人|投资人|股东|董事长|执行董事|首席合伙人|总经理)\s*[:：\-\s]*/i, '').trim();
+                                    // 只保留中文、字母、数字、·・空格、（）() 等常用姓名合法字符（丢 emoji / 奇怪字符）
+                                    s = s.replace(/[^\u4e00-\u9fa5A-Za-z0-9·・\.\s（）()\-—_]/g, '').trim();
+                                    return s;
+                                } catch (e) { return String(raw || '').trim(); }
+                            }
+                            try {
+                                var dp = new DOMParser();
+                                var ddoc = dp.parseFromString(htmlStr || '', 'text/html');
+                                if (!ddoc || !ddoc.body) return out;
+                                function pickText(selector, root) {
+                                    try {
+                                        var scope = root || ddoc;
+                                        var el = scope.querySelector ? scope.querySelector(selector) : null;
+                                        if (!el) return '';
+                                        return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                                    } catch (e) { return ''; }
+                                }
+                                function pickAllText(selector, root) {
+                                    try {
+                                        var scope = root || ddoc;
+                                        var nl = scope.querySelectorAll ? scope.querySelectorAll(selector) : [];
+                                        var arr = [];
+                                        for (var w = 0; w < nl.length; w++) {
+                                            var t = (nl[w].innerText || nl[w].textContent || '').replace(/\s+/g, ' ').trim();
+                                            if (t) arr.push(t);
+                                        }
+                                        return arr;
+                                    } catch (e) { return []; }
+                                }
+                                // 按「标签文本」找对应 value：天眼查 header 是 label + value 的结构，列数不固定
+                                //   keywords: ['标签1','标签2',...] 任一命中即返回对应 value
+                                //   excludeSuffix: 从 value 尾部切掉的关键字（如"复制""更多""附近企业"）
+                                //   fieldHint: 'tel'/'email'/'addr'/'ccode'/undefined → 只取对应类别的专属节点（防止电话栏里抽出邮箱）
+                                function pickByLabel(keywords, excludeSuffix, fieldHint) {
+                                    try {
+                                        if (!keywords || !keywords.length) return '';
+                                        var kws = keywords.map(function (k) { return String(k || '').trim(); }).filter(Boolean);
+                                        if (!kws.length) return '';
+                                        var hint = String(fieldHint || '').toLowerCase();
+                                        // 天眼查 header 固定容器范围：detail-content → 3 个 detail-item（first/second/third）
+                                        var scope = ddoc.querySelector('.index_detail-content__RCnTr') || ddoc.querySelector('#J_CompanyHeaderContent') || ddoc;
+                                        var infoItems = scope.querySelectorAll ? scope.querySelectorAll('.index_detail-info-item__oAOqL, [class*="detail-info-item"]') : [];
+                                        for (var idx = 0; idx < infoItems.length; idx++) {
+                                            var it = infoItems[idx];
+                                            var raw = (it.innerText || it.textContent || '').replace(/\s+/g, ' ').trim();
+                                            if (!raw) continue;
+                                            var hit = false;
+                                            var labelEnd = -1;
+                                            for (var ki = 0; ki < kws.length; ki++) {
+                                                var kw = kws[ki];
+                                                // 1) 优先找独立 label 节点（class 含 "detail-label"）里精确匹配（避免"法定代表人"误吃"法人"）
+                                                var labelEls = it.querySelectorAll('[class*="detail-label"]');
+                                                var matchedLabelNode = null;
+                                                for (var li = 0; li < labelEls.length; li++) {
+                                                    var lt = (labelEls[li].innerText || labelEls[li].textContent || '').replace(/\s+/g, '').replace(/[:：]/g, '');
+                                                    if (lt && (lt === kw || lt.indexOf(kw) !== -1 || kw.indexOf(lt) !== -1)) {
+                                                        matchedLabelNode = labelEls[li];
+                                                        break;
+                                                    }
+                                                }
+                                                if (matchedLabelNode) {
+                                                    hit = true;
+                                                    break;
+                                                }
+                                                // 2) 兜底：整个 info-item 文本前缀包含 "关键字："
+                                                var re = new RegExp('^\\s*' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[:：]');
+                                                if (re.test(raw)) {
+                                                    hit = true;
+                                                    var pos = raw.indexOf('：');
+                                                    if (pos === -1) pos = raw.indexOf(':');
+                                                    labelEnd = pos;
+                                                    break;
+                                                }
+                                            }
+                                            if (!hit) continue;
+                                            // 命中 → 取这个 info-item 的 value
+                                            // 策略：按 fieldHint 只取对应类别专属 value 节点（防止「电话」标签下的「-」命中不了，却去旁边「邮箱」标签抽 mailto 链接）
+                                            var valueText = '';
+                                            if (hint === 'addr') {
+                                                var addrNode = it.querySelector('[class*="detail-address-text"], [class*="address-moretext"], [class*="detail-address-content"]');
+                                                if (addrNode) valueText = (addrNode.innerText || addrNode.textContent || '').replace(/\s+/g, ' ').trim();
+                                            } else if (hint === 'tel') {
+                                                var telNode = it.querySelector('[class*="detail-tel"] [class*="detail-tel"], [class*="detail-tel__"], [class*="phone__"], a[href^="tel:"]');
+                                                if (telNode) valueText = (telNode.innerText || telNode.textContent || '').replace(/\s+/g, ' ').trim();
+                                            } else if (hint === 'email') {
+                                                var emailNode = it.querySelector('[class*="detail-email__"], a[href^="mailto:"]');
+                                                if (emailNode) valueText = (emailNode.innerText || emailNode.textContent || '').replace(/\s+/g, ' ').trim();
+                                            } else if (hint === 'ccode') {
+                                                var ccNode = it.querySelector('[class*="detail-credit-code"]');
+                                                if (ccNode) valueText = (ccNode.innerText || ccNode.textContent || '').replace(/\s+/g, ' ').trim();
+                                            }
+                                            // 兜底通用：没 hint 或 hint 对应节点没抽到 → 从 info-item 文本扣 label / 扣操作按钮尾巴
+                                            if (!valueText) {
+                                                var labelTxt = '';
+                                                var ll = it.querySelectorAll('[class*="detail-label"]');
+                                                for (var lli = 0; lli < ll.length; lli++) labelTxt += (ll[lli].innerText || ll[lli].textContent || '') + ' ';
+                                                labelTxt = labelTxt.replace(/\s+/g, ' ').trim();
+                                                valueText = raw;
+                                                if (labelTxt) valueText = valueText.split(labelTxt).slice(-1).join('').trim();
+                                                else if (labelEnd !== -1) valueText = valueText.slice(labelEnd + 1).trim();
+                                            }
+                                            // 去掉尾部操作/冗余词（复制、更多、附近企业、N 等）
+                                            if (valueText) {
+                                                var cuts = Array.isArray(excludeSuffix) && excludeSuffix.length ? excludeSuffix.slice() : ['复制', '关注TA', '私信', '查看简历'];
+                                                cuts = cuts.concat(['附近企业', '更多', '企业名片', '查看地图']);
+                                                for (var ci = 0; ci < cuts.length; ci++) {
+                                                    var c = cuts[ci];
+                                                    var cidx = valueText.lastIndexOf(c);
+                                                    if (cidx !== -1) valueText = valueText.slice(0, cidx).trim();
+                                                }
+                                                valueText = valueText.replace(/\s+\d+\s*$/, '').trim();
+                                                valueText = valueText.replace(/^[-—_|:：]+\s*/, '').trim();
+                                            }
+                                            if (valueText) return valueText;
+                                        }
+                                        return '';
+                                    } catch (e) { return ''; }
+                                }
+                                // 1) 统一社会信用代码
+                                var trySel = [
+                                    '.index_detail-credit-code__fH1Ny',
+                                    '.index_company-header-content__Ayzr2 .index_detail-credit-code__fH1Ny span',
+                                    '[class*="creditcode"]', '[class*="credit-code"]',
+                                    '#J_CompanyHeaderContent .index_detail-item-first__IS2_h .index_detail-info-item__oAOqL:first-child span span'
+                                ];
+                                for (var si = 0; si < trySel.length; si++) { var v = pickText(trySel[si]); if (v && /[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}/.test(v)) { out.creditCode = v.match(/[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}/)[0]; break; } }
+                                if (!out.creditCode) {
+                                    var byCC = pickByLabel(['统一社会信用代码', '社会信用代码', '统一信用代码', '信用代码', '组织机构代码', '工商注册号'], null, 'ccode');
+                                    if (byCC) {
+                                        var mCC = byCC.match(/[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}/);
+                                        if (mCC) out.creditCode = mCC[0];
+                                    }
+                                }
+                                // 2) 法人
+                                var lpSel = [
+                                    '.index_legal-person-root__THrdz .index_link-click__NmHxP, .index_legal-person-root__THrdz .index_detail-value___x7WE',
+                                    '#J_CompanyHeaderContent [class*="legal"] a, #J_CompanyHeaderContent [class*="legal"] [class*="value"]',
+                                    '[class*="legalperson"] [class*="link-click"], [class*="legalPerson"] a'
+                                ];
+                                for (var si2 = 0; si2 < lpSel.length; si2++) { var v2 = pickText(lpSel[si2]); if (v2) { out.legalPerson = sanitizeLegalPerson(v2); break; } }
+                                if (!out.legalPerson) {
+                                    var byLP = pickByLabel(['法定代表人', '法人', '法定代表', '执行事务合伙人', '负责人', '投资人', '首席合伙人']);
+                                    if (byLP) out.legalPerson = sanitizeLegalPerson(byLP);
+                                }
+                                // 3) 成立日期（不再硬编码 nth-of-type(4)，按标签文本扫描，列数任意变化都不怕）
+                                var edSel = [
+                                    '.index_detail-item-first__IS2_h .index_detail-info-item__oAOqL:nth-of-type(4) .index_detail-text__Ac9Py, .index_detail-item-first__IS2_h .index_detail-info-item__oAOqL:nth-of-type(4) .index_copy-val__Qdkxu',
+                                    '#J_CompanyHeaderContent [class*="detail-item-first"] span:has(> :nth-child(4)) .index_detail-text__Ac9Py',
+                                    '[class*="establish"] [class*="text"], [class*="establishDate"]'
+                                ];
+                                for (var si3 = 0; si3 < edSel.length; si3++) {
+                                    var v3 = pickText(edSel[si3]);
+                                    if (!v3) continue;
+                                    var m3 = v3.match(/\d{4}[\-\/年.]\d{1,2}[\-\/月.]\d{1,2}/);
+                                    if (m3) { out.establishDate = m3[0].replace(/[年月.]/g,'-').replace(/\/+/g,'-').replace(/\-+/g,'-').replace(/日/g,''); break; }
+                                }
+                                if (!out.establishDate) {
+                                    var byED = pickByLabel(['成立日期', '成立时间', '注册日期', '登记日期', '核准日期', '发证日期']);
+                                    if (byED) {
+                                        var mED = byED.match(/\d{4}[\-\/年.]\d{1,2}[\-\/月.]\d{1,2}/);
+                                        if (mED) out.establishDate = mED[0].replace(/[年月.]/g,'-').replace(/\/+/g,'-').replace(/\-+/g,'-').replace(/日/g,'');
+                                    }
+                                }
+                                // 4) 电话（含格式校验：包含 @ 的直接丢掉；多号码取第 1 个非空）
+                                function sanitizePhone(raw) {
+                                    try {
+                                        var s = String(raw || '').replace(/\s+/g, '').trim();
+                                        if (!s) return '';
+                                        // 明确拒绝邮箱、纯横线 - 等占位符
+                                        if (/[@＠]/.test(s)) return '';
+                                        if (/^[-—_|:：,.，。；;]+$/.test(s)) return '';
+                                        // 如果有多个号码（逗号/分号分隔），取第一个非空
+                                        var parts = s.split(/[,，;；]/).map(function (x) { return x.trim(); }).filter(Boolean);
+                                        if (!parts.length) return '';
+                                        // 取第一个含数字的（过滤掉空字符串占位）
+                                        for (var pi = 0; pi < parts.length; pi++) {
+                                            if (/\d/.test(parts[pi])) return parts[pi];
+                                        }
+                                        return '';
+                                    } catch (e) { return ''; }
+                                }
+                                var telSel = [
+                                    '.index_detail-tel__fgpsE',
+                                    '.index_detail-tel-content__nZ54h .index_detail-tel__fgpsE',
+                                    '[class*="detail-tel-content"] [class*="detail-tel"]',
+                                    '[class*="telContent"] [class*="tel"], [class*="phone"]'
+                                ];
+                                for (var si4 = 0; si4 < telSel.length; si4++) { var v4 = pickText(telSel[si4]); if (v4) { var sp4 = sanitizePhone(v4); if (sp4) { out.phone = sp4; break; } } }
+                                if (!out.phone) {
+                                    var byTel = pickByLabel(['电话', '座机', '联系电话'], null, 'tel');
+                                    if (byTel) out.phone = sanitizePhone(byTel);
+                                }
+                                // 5) 地址（修复：加入短地址 -text- 类 + 标签文本扫描兜底；并且会自动切掉"附近企业 4"的尾部数字）
+                                var addrSel = [
+                                    '.index_detail-address-text__AaSjA',
+                                    '.index_detail-address-moretext__9R_Z1',
+                                    '.index_-address__Ai6MB .index_address-flex__umT58 .index_detail-address-text__AaSjA, .index_-address__Ai6MB .index_address-flex__umT58 .index_detail-address-moretext__9R_Z1',
+                                    '[class*="detail-address-text"]',
+                                    '[class*="detail-address-moretext"]',
+                                    '[class*="address-moretext"]',
+                                    '#J_CompanyHeaderContent [class*="-address"] [class*="address-flex"] [class*="text"], #J_CompanyHeaderContent [class*="-address"] [class*="address-flex"] [class*="moretext"]'
+                                ];
+                                for (var si5 = 0; si5 < addrSel.length; si5++) { var v5 = pickText(addrSel[si5]); if (v5) { out.address = v5; break; } }
+                                if (!out.address) {
+                                    var byAddr = pickByLabel(['地址', '注册地址', '企业地址', '公司地址', '办公地址', '经营地址'], null, 'addr');
+                                    if (byAddr) out.address = byAddr;
+                                }
+                            } catch (eBigParse) {  }
+                            return out;
+                        }
+                        var detailData = { creditCode: '', phone: '', legalPerson: '', address: '', establishDate: '' };
+                        var detailVia = '';
+                        var detailLastError = '';
+                        // 优先 A：当前已经是这家公司的详情页（并且 URL 就是 id 匹配），直接从 document DOM 解析
+                        try {
+                            var curUrl = window.location.href || '';
+                            var idFromUrl = '';
+                            var mUrl = curUrl.match(/tianyancha\.com\/(?:company|search|business)\/(\d+)/i);
+                            if (mUrl) idFromUrl = mUrl[1];
+                            if (idFromUrl && idFromUrl === companyId) {
+                                detailData = parseDetailFromHtml('<!doctype><html>' + (document.documentElement ? document.documentElement.outerHTML : document.body ? document.body.outerHTML : ''));
+                                detailVia = 'current-dom';
+                            }
+                        } catch (eCur) {}
+                        // 兜底 B：XHR 拉详情页 HTML（带 HTTP 状态校验 + 最多 2 次重试，解决「天眼查临时 403/风控 → 第二次再查就过」）
+                        if (!detailVia) {
+                            var detailUrl = origin2 + '/company/' + encodeURIComponent(companyId);
+                            var MAX_RETRY = 2; // 总共尝试 1 + MAX_RETRY = 3 次
+                            for (var attempt = 0; attempt <= MAX_RETRY; attempt++) {
+                                try {
+                                    if (attempt > 0) {
+                                        // 重试间隔：1200ms + 0~800ms 抖动，避开固定频率被风控
+                                        await new Promise(function (rsl) { setTimeout(rsl, 1200 + Math.floor(Math.random() * 800)); });
+                                    }
+                                    var attemptResult = await new Promise(function (rsd, rjd) {
+                                        try {
+                                            var xd = new XMLHttpRequest();
+                                            xd.open('GET', detailUrl, true);
+                                            xd.withCredentials = true;
+                                            xd.setRequestHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+                                            xd.onload = function () {
+                                                var st = xd.status || 0;
+                                                // 200/2xx/304 算成功；302/301 跳到登录 → 失败；403/429/5xx → 失败；0（浏览器 CORS 拦截）→ 失败
+                                                if (st >= 200 && st < 400) {
+                                                    rsd({ ok: true, httpStatus: st, html: xd.responseText || '' });
+                                                } else {
+                                                    var preview = String(xd.responseText || '').replace(/\s+/g, ' ').slice(0, 120);
+                                                    rjd(new Error('HTTP ' + st + (preview ? (' | ' + preview) : '')));
+                                                }
+                                            };
+                                            xd.onerror = function () { rjd(new Error('xhr onerror (CORS/网络拦截/被风控封)')); };
+                                            xd.timeout = 25000;
+                                            xd.ontimeout = function () { rjd(new Error('xhr timeout (' + xd.timeout + 'ms)')); };
+                                            xd.send(null);
+                                        } catch (eInner) { rjd(eInner); }
+                                    });
+                                    var parsed = parseDetailFromHtml(attemptResult.html || '');
+                                    var parsedFilled = !!(parsed.creditCode || parsed.phone || parsed.legalPerson || parsed.address || parsed.establishDate);
+                                    if (!parsedFilled) {
+                                        // HTML 取回来了但全空字段 → 可能是风控页（"请完成验证"）/ 登录跳转页 / 接口返回了空壳
+                                        // → 这种情况也当失败，进入重试
+                                        var htmlSample = String(attemptResult.html || '').replace(/\s+/g, ' ').slice(0, 200);
+                                        throw new Error('详情HTML字段全空（可能风控/未登录/返回登录页） | HTTP ' + attemptResult.httpStatus + ' | snippet=' + htmlSample);
+                                    }
+                                    detailData = parsed;
+                                    detailVia = 'xhr-html' + (attempt > 0 ? ('-retry' + attempt) : '');
+                                    detailLastError = '';
+                                    break; // 成功，跳出重试
+                                } catch (eDetail) {
+                                    detailLastError = (eDetail && eDetail.message ? eDetail.message : String(eDetail || ''));
+                                }
+                            }
+                            if (!detailVia) {
+                                detailVia = 'failed';
+                            }
+                        }
+                        // ========== Step 4: 组装返回 ==========
+                        var anyFilled = !!(detailData.creditCode || detailData.phone || detailData.legalPerson || detailData.address || detailData.establishDate);
+                        var payload = {
+                            companyName: matchedName,
+                            queryName: queryName,
+                            companyId: companyId,
+                            similarity: Number(similarity) || 0,
+                            candidatesCount: candidates.length,
+                            matchMode: matchMode,
+                            detailVia: detailVia,
+                            detailLastError: detailLastError || '',
+                            creditCode: detailData.creditCode || '',
+                            phone: detailData.phone || '',
+                            legalPerson: detailData.legalPerson || '',
+                            address: detailData.address || '',
+                            establishDate: detailData.establishDate || ''
+                        };
+                        var finalErr = '';
+                        if (!anyFilled) {
+                            if (detailVia === 'failed') {
+                                finalErr = '详情抓取失败' + (detailLastError ? ('：' + detailLastError.replace(/\s+/g, ' ').slice(0, 180)) : '');
+                            } else {
+                                finalErr = '详情页无字段';
+                            }
+                        }
+                        try { sendResponse({ success: anyFilled ? true : (detailVia === 'failed' ? false : true), data: payload, error: finalErr, via: detailVia, detailLastError: detailLastError || '' }); }
+                        catch (eSe) {  }
+                    } catch (tycBig) {
+                        try { sendResponse({ success: false, error: String(tycBig && tycBig.message || tycBig) }); } catch (e) {}
+                    }
+                })();
                 return true; // 异步
             }
 
-            // ===== 🔴 仿真点击：根据 locator 在列表页找到对应行，点击项目名称 .clickText =====
-            if (message.action === 'findClickRow') {
-                var loc = message.locator || {};
-                console.log('[content] 🖱️ 收到 findClickRow 定位器:', loc);
-                function findAndClick() {
-                    try {
-                        var rows = getTableRows();
-                        var headers = safeGetHeaders();
-                        var idxName = getColIndex(headers, ['项目名称']);
-                        var idxCode = getColIndex(headers, ['项目编号', '省级项目编号']);
-                        var idxCity = getColIndex(headers, ['所在市', '城市', '所在地']);
-                        var idxClass = getColIndex(headers, ['项目分类']);
-                        var idxUnit = getColIndex(headers, ['建设单位']);
-                        console.log('[content] 🖱️   扫描行数=' + rows.length + ', 列: name=' + idxName + ' code=' + idxCode + ' city=' + idxCity);
-
-                        var bestRow = null;
-                        var bestScore = 0;
-                        for (var r = 0; r < rows.length; r++) {
-                            var cells = rows[r].querySelectorAll('td');
-                            if (cells.length < 3) continue;
-                            var s = 0;
-                            var nameTxt = idxName !== -1 ? getCellText(cells[idxName]) : '';
-                            var codeTxt = idxCode !== -1 ? getCellText(cells[idxCode]) : '';
-                            var cityTxt = idxCity !== -1 ? getCellText(cells[idxCity]) : '';
-                            var clsTxt = idxClass !== -1 ? getCellText(cells[idxClass]) : '';
-                            var unitTxt = idxUnit !== -1 ? getCellText(cells[idxUnit]) : '';
-                            if (loc.code && codeTxt && loc.code === codeTxt) s += 10; // 编号完全匹配 +10
-                            if (loc.projectName && nameTxt && loc.projectName === nameTxt) s += 5; // 名称完全匹配 +5
-                            if (loc.city && cityTxt && cityTxt.indexOf(loc.city) !== -1) s += 2;
-                            if (loc.projClass && clsTxt && clsTxt === loc.projClass) s += 1;
-                            if (loc.unit && unitTxt && unitTxt === loc.unit) s += 1;
-                            if (nameTxt && loc.projectName && (nameTxt.indexOf(loc.projectName) !== -1 || loc.projectName.indexOf(nameTxt) !== -1)) s += 3;
-                            if (s > bestScore) { bestScore = s; bestRow = rows[r]; }
-                        }
-
-                        if (!bestRow || bestScore < 3) {
-                            var errMsg = '未找到匹配行 (最佳分数=' + bestScore + ')';
-                            console.warn('[content] 🖱️ ' + errMsg);
-                            return { success: false, error: errMsg };
-                        }
-                        console.log('[content] 🖱️ 找到匹配行，最佳分数=' + bestScore);
-                        var cells = bestRow.querySelectorAll('td');
-                        var clickTarget = null;
-                        if (idxName !== -1 && cells[idxName]) {
-                            clickTarget = cells[idxName].querySelector('.clickText, span.clickText, [class*="click"], a');
-                            if (!clickTarget) clickTarget = cells[idxName];
-                        }
-                        if (!clickTarget) {
-                            // fallback: 在整行中找第一个带 clickText 的
-                            clickTarget = bestRow.querySelector('.clickText');
-                        }
-                        if (!clickTarget) {
-                            return { success: false, error: '找不到可点击元素（没有.clickText）' };
-                        }
-                        console.log('[content] 🖱️ 点击元素:', clickTarget, '文本:', (clickTarget.innerText || '').slice(0, 50));
-
-                        // 触发原生点击事件（同时触发鼠标事件 + click，兼容 Vue）
-                        try {
-                            var evt1 = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window });
-                            clickTarget.dispatchEvent(evt1);
-                            var evt2 = new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window });
-                            clickTarget.dispatchEvent(evt2);
-                            var evt3 = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-                            clickTarget.dispatchEvent(evt3);
-                            // 兼容一些框架用 onclick 属性的
-                            if (typeof clickTarget.click === 'function') clickTarget.click();
-                        } catch (clickErr) {
-                            // 如果 new MouseEvent 在某些环境不兼容，fallback 到 click()
-                            try { if (typeof clickTarget.click === 'function') clickTarget.click(); } catch (e2) {}
-                        }
-                        return { success: true };
-                    } catch (e) {
-                        console.error('[content] 🖱️ findClickRow 异常:', e);
-                        return { success: false, error: String(e.message || e) };
-                    }
-                }
-                // 如果当前列表还没渲染好（比如行数<1），重试几次
-                var tryCount = 0;
-                function tryIt() {
-                    tryCount++;
-                    var rows = getTableRows();
-                    if (rows.length > 0 || tryCount > 6) {
-                        var res = findAndClick();
-                        sendResponse(res);
-                    } else {
-                        console.log('[content] 🖱️   列表未渲染，等待下一次重试... tryCount=' + tryCount);
-                        setTimeout(tryIt, 700);
-                    }
-                }
-                tryIt();
-                return true;
+            // 🔴 仿真点击消息：已完全弃用，直接返回失败
+            if (message.action === 'findClickRow' || message.action === 'extractCompleteModal') {
+                try { sendResponse({ success: false, data: {}, error: '仿真点击已弃用', via: 'deprecated' }); } catch (e) {}
+                return false;
             }
             if (message.action === 'checkPage') {
                 var listType = isListPage();
@@ -3843,73 +4647,528 @@
                 return true;
             }
 
+            // 🔴 「获取全部数据」第1步：预请求 probeTotal（1条/pageSize=1，无验证码）拿到 total + hasFilter
+            if (message.action === 'probeTotal') {
+                (async function () {
+                    try {
+                        var msgType = message.type;
+                        var cfg = _getApiListConfig(msgType);
+                        if (!cfg) { sendResponse({ success: false, error: '未知 type=' + msgType, total: 0, hasFilter: false }); return; }
+                        var fp = collectSmartFilterParams(msgType);
+                        // 🔴 融合 popup 传过来的筛选（统一走公共函数）
+                        var extraFp = (message && message.filters && typeof message.filters === 'object') ? message.filters : {};
+                        fp = _mergePopupFiltersIntoFp(msgType, fp, extraFp);
+                        var hasFilter = _hasAnyFilter(fp);
+                        var origin = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+                        var filterQs = _buildFilterQueryString(fp);
+                        var probeUrl = origin + cfg.path + '?pageNum=1&pageSize=1&kaptcha=&kaptchaKey=&flag=false' + filterQs;
+                        console.log('[content:probeTotal] type=' + msgType + ', hasFilter=' + hasFilter + ', url=' + probeUrl);
+                        try {
+                            var pXhr = new XMLHttpRequest();
+                            pXhr.open('GET', probeUrl, true);
+                            pXhr.withCredentials = true;
+                            pXhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+                            pXhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                            pXhr.onload = function () {
+                                try {
+                                    var pText = pXhr.responseText || '';
+                                    var pJson = {};
+                                    try { pJson = JSON.parse(pText || '{}'); } catch (eP) {}
+                                    var probeTotal = parseInt(String(pJson && (pJson.total || (pJson.data && pJson.data.total)) || 0)) || 0;
+                                    console.log('[content:probeTotal] 返回 total=' + probeTotal + ', hasFilter=' + hasFilter);
+                                    sendResponse({ success: true, total: probeTotal, hasFilter: hasFilter });
+                                } catch (e) {
+                                    sendResponse({ success: false, total: 0, hasFilter: hasFilter, error: String(e.message || e) });
+                                }
+                            };
+                            pXhr.onerror = function () { sendResponse({ success: false, total: 0, hasFilter: hasFilter, error: 'xhr onerror' }); };
+                            pXhr.send(null);
+                        } catch (bigE) { sendResponse({ success: false, total: 0, hasFilter: hasFilter, error: String(bigE.message || bigE) }); }
+                    } catch (eAll) { sendResponse({ success: false, total: 0, hasFilter: false, error: String(eAll.message || eAll) }); }
+                })();
+                return true;
+            }
+
+            // 🔴🔗 施工许可「提取合并表」：抓 permit(列表+详情) + basic(详情)，按 BASIC_FIELDS/PERMIT_FIELDS 白名单裁剪后回传 popup，合并逻辑 100% 复用 popup「合并导出」规范
+            if (message.action === 'permitFetchMergeBasic') {
+                (async function () {
+                    try {
+                        // 🔴 严格和 popup.js 最新 BASIC_FIELDS / PERMIT_FIELDS 对齐（缺项目分类/所在市会直接丢列！）
+                        var PBM_BASIC_FIELDS = [
+                            // ✅ 用户指定的施工许可合并表 basic 段顺序：1-19（和 popup BASIC_FIELDS 100% 一致）
+                            '项目名称','省级项目编号','项目分类','建设单位','组织机构代码',
+                            '项目所在地','所在市','详细地址','立项文号','立项级别',
+                            '立项批复机关','立项批复时间','总投资（万元）','总面积/长度（平方米/米）',
+                            '建设规模','建设性质','工程用途','计划开工日期','数据等级'
+                        ];
+                        var PBM_PERMIT_FIELDS = [
+                            // ✅ 和 popup PERMIT_FIELDS 100% 一致（用户指定的顺序）
+                            '工程名称','施工许可证编号','省级项目编号','合同价格','建设地址','建设规模','建设单位','工程总承包单位','勘察单位','设计单位','施工单位','监理单位',
+                            '建设单位项目负责人','工程总承包项目经理','勘察单位项目负责人','设计单位项目负责人','施工单位项目负责人',
+                            '总监理工程师','合同工期','状态','备注','发证机关','数据等级'
+                        ];
+                        var HARD_LIMIT_PBM = 300;
+                        var userWantedPbm = Math.max(0, Number(message.apiPageSize) || 0) || 100;
+                        var extraFpPbm = (message && message.filters && typeof message.filters === 'object') ? message.filters : {};
+                        var baseOriginPbm = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+                        var cfgPbm = _getApiListConfig('permit');
+                        var smartFpPbm = collectSmartFilterParams('permit');
+                        var fpPbm = _mergePopupFiltersIntoFp('permit', smartFpPbm, extraFpPbm);
+
+                        // Step1: probe 总数
+                        var probeTotalPbm = 0;
+                        try {
+                            var fp1 = _sanitizeFilterParams('permit', fpPbm || {});
+                            var filterQs = _buildFilterQueryString(fp1);
+                            var probeUrl = baseOriginPbm + cfgPbm.path + '?pageNum=1&pageSize=1&kaptcha=&kaptchaKey=&flag=false' + filterQs;
+                            var pResp = await new Promise(function (resProbe) {
+                                var px = new XMLHttpRequest();
+                                px.open('GET', probeUrl, true);
+                                px.withCredentials = true;
+                                px.setRequestHeader('Accept', 'application/json, text/plain, */*');
+                                px.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                                px.onload = function () {
+                                    try {
+                                        var tj = JSON.parse(px.responseText || '{}');
+                                        var t = parseInt(String(tj && (tj.total || (tj.data && tj.data.total)) || 0)) || 0;
+                                        resProbe({ success: true, total: t, raw: tj });
+                                    } catch (eProbe) { resProbe({ success: false, total: 0, error: String(eProbe.message || eProbe) }); }
+                                };
+                                px.onerror = function () { resProbe({ success: false, total: 0, error: 'xhr onerror' }); };
+                                px.timeout = 20000;
+                                px.ontimeout = function () { resProbe({ success: false, total: 0, error: 'xhr timeout' }); };
+                                px.send(null);
+                            });
+                            probeTotalPbm = Math.max(0, Number(pResp && pResp.total) || 0);
+                        } catch (eProbe) { probeTotalPbm = 0; }
+                        var totalOverLimitPbm = probeTotalPbm > HARD_LIMIT_PBM;
+                        var effectiveTotal = (probeTotalPbm > 0) ? Math.max(probeTotalPbm, userWantedPbm) : userWantedPbm;
+                        var requestSizePbm = Math.min(effectiveTotal, HARD_LIMIT_PBM);
+                        if (requestSizePbm < 1) requestSizePbm = 10;
+                        console.log('%c[content:permitMergeBasic] Step1 probe: total=' + probeTotalPbm + ', userWant=' + userWantedPbm + ', requestSize=' + requestSizePbm, 'color:#1677ff;font-weight:bold;');
+
+                        // Step2: permit 列表（带验证码等待，15 分钟超时）
+                        var listResult = null;
+                        try {
+                            listResult = await new Promise(function (resList, rejList) {
+                                var called = false;
+                                var timer = setTimeout(function () {
+                                    if (called) return; called = true;
+                                    rejList(new Error('列表抓取超时（15分钟内未完成验证码）'));
+                                }, 15 * 60 * 1000);
+                                function done(r) {
+                                    if (called) return; called = true;
+                                    try { clearTimeout(timer); } catch (e) {}
+                                    resList(r || { success: false });
+                                }
+                                try { fetchListRapidFilteredApi('permit', 1, requestSizePbm, fpPbm, done, { skipOverlapCheck: true }); }
+                                catch (eRun) {
+                                    if (called) return; called = true;
+                                    try { clearTimeout(timer); } catch (e) {}
+                                    rejList(new Error('列表执行异常: ' + (eRun.message || eRun)));
+                                }
+                            });
+                        } catch (eList) { listResult = { success: false, error: String(eList.message || eList) }; }
+                        if (!listResult || !listResult.success || !listResult.data || !Array.isArray(listResult.data) || listResult.data.length === 0) {
+                            sendResponse({
+                                success: false,
+                                error: '施工许可列表抓取失败：' + ((listResult && listResult.error) ? String(listResult.error) : '未获取到施工许可列表'),
+                                permitTotal: probeTotalPbm,
+                                _noFallback: true
+                            });
+                            return;
+                        }
+                        var permitListRows = listResult.data.slice(0, requestSizePbm);
+                        console.log('[content:permitMergeBasic] Step2 permit 列表：' + permitListRows.length + ' 条');
+
+                        // Step3: permit 详情（并发 fetchDetailFromApi）
+                        var CONCURRENT_PD = 5;
+                        var permitDetailResults = new Array(permitListRows.length);
+                        for (var ipd = 0; ipd < permitDetailResults.length; ipd++) permitDetailResults[ipd] = {};
+                        var curPdLock = { v: 0 };
+                        var totalPd = permitListRows.length;
+                        async function workerPd() {
+                            while (true) {
+                                var i = curPdLock.v++;
+                                if (i >= totalPd) break;
+                                var rPd = permitListRows[i];
+                                var pdCode = (rPd && rPd['施工许可证编号']) ? String(rPd['施工许可证编号']) : '';
+                                var pdName = (rPd && (rPd['项目名称'] || rPd['工程名称'])) ? String(rPd['项目名称'] || rPd['工程名称']) : '';
+                                try {
+                                    if (pdCode) {
+                                        var respPd = await fetchDetailFromApi('permit', pdCode, { listLevel: rPd, listProjectName: pdName });
+                                        if (respPd && respPd.success && respPd.data && Object.keys(respPd.data).length > 1) {
+                                            permitDetailResults[i] = respPd.data;
+                                            continue;
+                                        }
+                                    }
+                                } catch (e) {}
+                                permitDetailResults[i] = rPd ? Object.assign({}, rPd) : {};
+                            }
+                        }
+                        var pdWs = [];
+                        for (var w = 0; w < Math.min(CONCURRENT_PD, Math.max(totalPd, 1)); w++) pdWs.push(workerPd());
+                        if (pdWs.length > 0) { await Promise.all(pdWs); }
+                        console.log('[content:permitMergeBasic] Step3 permit 详情：' + totalPd + ' 条');
+
+                        // Step4: permit 列表+详情合并（NEVER_OVERWRITE_FROM_DETAIL：数据等级不被详情脏值覆盖）
+                        var NEVER_OVERWRITE = {
+                            '数据等级': true, '工程名称': true, '施工许可证编号': true, '省级项目编号': true, 'detailUrl': true
+                        };
+                        var fullPermitRows = [];
+                        try {
+                            for (var im = 0; im < permitListRows.length; im++) {
+                                var listR = permitListRows[im] || {};
+                                var detR = permitDetailResults[im] || {};
+                                var row = {};
+                                Object.keys(listR).forEach(function (k) { row[k] = listR[k]; });
+                                Object.keys(detR).forEach(function (k) {
+                                    if (NEVER_OVERWRITE[k]) return;
+                                    if (detR[k] !== undefined && detR[k] !== null && detR[k] !== '') row[k] = detR[k];
+                                });
+                                if ('数据等级' in row) row['数据等级'] = _stringifyDataLevel(row['数据等级']);
+                                fullPermitRows.push(row);
+                            }
+                        } catch (eM) { fullPermitRows = permitListRows.slice(); }
+
+                        // Step5: basic 详情（省级项目编号去重反查）
+                        var uniqBasicCodes = [];
+                        var seenCodes = {};
+                        for (var ic = 0; ic < fullPermitRows.length; ic++) {
+                            var c = (fullPermitRows[ic] && fullPermitRows[ic]['省级项目编号']) ? String(fullPermitRows[ic]['省级项目编号']).trim() : '';
+                            if (!c) continue;
+                            if (seenCodes[c]) continue;
+                            seenCodes[c] = true; uniqBasicCodes.push(c);
+                        }
+                        var basicMap = {};
+                        var CONCURRENT_BD = 5;
+                        var curBdLock = { v: 0 };
+                        async function workerBd() {
+                            while (true) {
+                                var i = curBdLock.v++;
+                                if (i >= uniqBasicCodes.length) break;
+                                var code = uniqBasicCodes[i];
+                                try {
+                                    var respBd = await fetchDetailFromApi('basic', code, { listLevel: null });
+                                    if (respBd && respBd.success && respBd.data && Object.keys(respBd.data).length >= 2) {
+                                        basicMap[code] = respBd.data;
+                                        if ('数据等级' in basicMap[code]) basicMap[code]['数据等级'] = _stringifyDataLevel(basicMap[code]['数据等级']);
+                                        continue;
+                                    }
+                                } catch (e) {}
+                                basicMap[code] = { '省级项目编号': code };
+                            }
+                        }
+                        var bdWs = [];
+                        for (var wb = 0; wb < Math.min(CONCURRENT_BD, uniqBasicCodes.length); wb++) bdWs.push(workerBd());
+                        if (bdWs.length > 0) { await Promise.all(bdWs); }
+                        var basicSourceArr = Object.keys(basicMap).map(function (ck) { return basicMap[ck]; });
+                        console.log('[content:permitMergeBasic] Step5 basic 详情：去重 ' + uniqBasicCodes.length + ' 个，成功 ' + basicSourceArr.length + ' 个');
+
+                        // Step6: 【最终瘦身】按 PBM_BASIC_FIELDS / PBM_PERMIT_FIELDS 白名单裁剪（只发 popup 合并导出需要的列）
+                        function clipRow(src, fields) {
+                            var out = {};
+                            if (!src || !fields) return out;
+                            for (var i = 0; i < fields.length; i++) {
+                                var k = fields[i];
+                                if (k in src) {
+                                    out[k] = (k === '数据等级') ? _stringifyDataLevel(src[k]) : src[k];
+                                    if (out[k] === undefined || out[k] === null) out[k] = '';
+                                } else out[k] = '';
+                            }
+                            return out;
+                        }
+                        var clippedPermit = [];
+                        for (var ip = 0; ip < fullPermitRows.length; ip++) clippedPermit.push(clipRow(fullPermitRows[ip], PBM_PERMIT_FIELDS));
+                        var clippedBasic = [];
+                        for (var ib = 0; ib < basicSourceArr.length; ib++) clippedBasic.push(clipRow(basicSourceArr[ib], PBM_BASIC_FIELDS));
+
+                        // ✅ 最终 sendResponse（仅此一次，无 progress 无 storage，白名单后只有 ~40KB 绝对不会超限）
+                        sendResponse({
+                            success: true,
+                            permitRows: clippedPermit,   // PERMIT_FIELDS 23 列（popup 合并导出规范）
+                            basicRows: clippedBasic,     // BASIC_FIELDS 17 列（popup 合并导出规范）
+                            permitTotal: probeTotalPbm,
+                            permitFetched: clippedPermit.length,
+                            basicUniqCount: clippedBasic.length
+                        });
+                    } catch (eBigPbm) {
+                        console.error('[content:permitMergeBasic] 致命错误:', eBigPbm);
+                        sendResponse({
+                            success: false,
+                            error: '合并表抓取异常: ' + String(eBigPbm && eBigPbm.message || eBigPbm),
+                            _noFallback: true
+                        });
+                    }
+                })();
+                return true;
+            }
+
+            // 🔴🔗 施工许可「提取合并表」兼容模式（DOM）：popup 已经用 DOM 方式抓完 permit 列表+详情，把 fullPermitRows 传进来 →
+            //     content 只负责：按省级项目编号去重反查 basic → 按 PBM_*_FIELDS 白名单裁剪 → 返回 popup 合并
+            if (message.action === 'permitMergeBasicFromPermitRows') {
+                (async function () {
+                    try {
+                        var PBM_BASIC_FIELDS_D = [
+                            // ✅ 和 popup BASIC_FIELDS 100% 一致（缺项目分类/所在市会直接丢列）
+                            '项目名称','省级项目编号','项目分类','建设单位','组织机构代码',
+                            '项目所在地','所在市','详细地址','立项文号','立项级别',
+                            '立项批复机关','立项批复时间','总投资（万元）','总面积/长度（平方米/米）',
+                            '建设规模','建设性质','工程用途','计划开工日期','数据等级'
+                        ];
+                        var PBM_PERMIT_FIELDS_D = [
+                            // ✅ 和 popup PERMIT_FIELDS 100% 一致
+                            '工程名称','施工许可证编号','省级项目编号','合同价格','建设地址','建设规模','建设单位','工程总承包单位','勘察单位','设计单位','施工单位','监理单位',
+                            '建设单位项目负责人','工程总承包项目经理','勘察单位项目负责人','设计单位项目负责人','施工单位项目负责人',
+                            '总监理工程师','合同工期','状态','备注','发证机关','数据等级'
+                        ];
+                        var inputPermit = Array.isArray(message.permitRows) ? message.permitRows : [];
+                        if (inputPermit.length === 0) {
+                            sendResponse({ success: false, error: '传入的 permit 数据为空，请先在兼容模式下点击「🔍 开始提取」抓取施工许可数据。', _noFallback: true });
+                            return;
+                        }
+                        // 去重反查 basic（100% 复用 permitFetchMergeBasic Step5）
+                        var uniqCodesD = [];
+                        var seenCodesD = {};
+                        for (var icd = 0; icd < inputPermit.length; icd++) {
+                            var cd = (inputPermit[icd] && inputPermit[icd]['省级项目编号']) ? String(inputPermit[icd]['省级项目编号']).trim() : '';
+                            if (!cd) continue;
+                            if (seenCodesD[cd]) continue;
+                            seenCodesD[cd] = true; uniqCodesD.push(cd);
+                        }
+                        var basicMapD = {};
+                        var CONCURRENT_D = 5;
+                        var curBdLockD = { v: 0 };
+                        async function workerBD() {
+                            while (true) {
+                                var i = curBdLockD.v++;
+                                if (i >= uniqCodesD.length) break;
+                                var code = uniqCodesD[i];
+                                try {
+                                    var rbd = await fetchDetailFromApi('basic', code, { listLevel: null });
+                                    if (rbd && rbd.success && rbd.data && Object.keys(rbd.data).length >= 2) {
+                                        basicMapD[code] = rbd.data;
+                                        if ('数据等级' in basicMapD[code]) basicMapD[code]['数据等级'] = _stringifyDataLevel(basicMapD[code]['数据等级']);
+                                        continue;
+                                    }
+                                } catch (e) {}
+                                basicMapD[code] = { '省级项目编号': code };
+                            }
+                        }
+                        var wsD = [];
+                        for (var wbd = 0; wbd < Math.min(CONCURRENT_D, Math.max(uniqCodesD.length, 1)); wbd++) wsD.push(workerBD());
+                        if (wsD.length > 0) { await Promise.all(wsD); }
+                        var basicSourceArrD = Object.keys(basicMapD).map(function (ck) { return basicMapD[ck]; });
+                        // 白名单裁剪（100% 复用 permitFetchMergeBasic Step6）
+                        function clipRowD(src, fields) {
+                            var out = {};
+                            if (!src || !fields) return out;
+                            for (var i = 0; i < fields.length; i++) {
+                                var k = fields[i];
+                                if (k in src) {
+                                    out[k] = (k === '数据等级') ? _stringifyDataLevel(src[k]) : src[k];
+                                    if (out[k] === undefined || out[k] === null) out[k] = '';
+                                } else out[k] = '';
+                            }
+                            return out;
+                        }
+                        var clippedPermitD = [];
+                        for (var ipd = 0; ipd < inputPermit.length; ipd++) clippedPermitD.push(clipRowD(inputPermit[ipd], PBM_PERMIT_FIELDS_D));
+                        var clippedBasicD = [];
+                        for (var ibd = 0; ibd < basicSourceArrD.length; ibd++) clippedBasicD.push(clipRowD(basicSourceArrD[ibd], PBM_BASIC_FIELDS_D));
+                        sendResponse({
+                            success: true,
+                            permitRows: clippedPermitD,
+                            basicRows: clippedBasicD,
+                            permitTotal: inputPermit.length,
+                            permitFetched: clippedPermitD.length,
+                            basicUniqCount: clippedBasicD.length,
+                            via: 'dom-mergebuilder'
+                        });
+                    } catch (eBigDom) {
+                        sendResponse({
+                            success: false,
+                            error: '合并表(basic反查)异常: ' + String(eBigDom && eBigDom.message || eBigDom),
+                            _noFallback: true
+                        });
+                    }
+                })();
+                return true;
+            }
+
+            // 🔴 「获取全部数据」第2步：无筛选 → 一次性 pageNum=1&pageSize=总条数（彻底抛弃 100 条/页逐页，因为服务器第 4 页就返回第 1 页重复数据）
+            if (message.action === 'rapidFetchAllPageByPage') {
+                (async function () {
+                    try {
+                        var allType = message.type;
+                        var cfgAll = _getApiListConfig(allType);
+                        if (!cfgAll) { sendResponse({ success: false, data: [], error: '未知 type=' + allType, _noFallback: true }); return; }
+                        var estimatedTotal = Math.max(0, Number(message.totalEstimated) || 0);
+
+                        function progress(curPage, totalPages, curCount, totalEst) {
+                            try {
+                                sendResponse({
+                                    __progress: true,
+                                    data: { currentPage: curPage, totalPages: totalPages || 0, currentCount: curCount, total: totalEst || 0 }
+                                });
+                            } catch (e) {}
+                        }
+
+                        var originAll = (window.location.href.match(/^(https?:\/\/[^\/]+)/) || [])[1] || window.location.origin || 'https://skypt.gdcic.net';
+                        var HL_ALL = 300;   // 🚀「获取全部数据」硬上限（实测确认：服务器无论有没有筛选，301+ 全重复）
+                        var wantAll = Math.max(0, Number(estimatedTotal) || 0);
+                        var psAll = wantAll > 0
+                            ? Math.min(wantAll, HL_ALL)
+                            : Math.min(100, HL_ALL);
+                        var truncAll = wantAll > HL_ALL;
+                        try { _resetApiDupState(); } catch (eDup) {}
+                        console.log('%c[content:rapidFetchAll] 🚀 极速模式「获取全部数据」→ 一次性：pageNum=1&pageSize=' + psAll +
+                            (truncAll ? ('（服务器 trueTotal=' + wantAll + ' > 硬上限 ' + HL_ALL + '，服务器从第 ' + (HL_ALL + 1) + ' 条起无论有没有筛选全部返回重复假数据，自动截断到前 ' + HL_ALL + ' 条真实数据）') : ''),
+                            'color:#1677ff;color:#fff;font-weight:bold;');
+                        progress(1, 1, 0, wantAll);
+                        var firstR = fetchListViaApiReal(allType, 1, psAll, { skipOverlapCheck: true, debug: true });
+                        if (!firstR || !firstR.success) {
+                            console.error('[content:rapidFetchAll] 一次性请求失败：', (firstR && firstR.error) || '未知');
+                            sendResponse({ success: false, data: [], error: '一次性请求失败: ' + ((firstR && firstR.error) || '未知'), _noFallback: true });
+                            return;
+                        }
+                        var allRows = (firstR.data && Array.isArray(firstR.data)) ? firstR.data.slice(0, psAll) : [];
+                        var trueTotal = (typeof firstR.total === 'number' && firstR.total > 0) ? firstR.total : wantAll;
+                        var actualCount = allRows.length;
+                        console.log('[content:rapidFetchAll] ✅ 一次性完成：trueTotal=' + trueTotal + ', 本次实际交付=' + actualCount + ' 条, 请求 pageSize=' + psAll);
+                        progress(1, 1, actualCount, trueTotal);
+
+                        // 超过硬上限（服务器 301+ 全重复）→ 推 serverDupStop 警告给 popup
+                        if (truncAll) {
+                            try {
+                                sendResponse({
+                                    __progress: true,
+                                    data: {
+                                        serverDupStop: true,
+                                        currentPage: 1,
+                                        totalPages: 1,
+                                        currentCount: actualCount,
+                                        total: trueTotal,
+                                        msg: '服务器总数据 ' + trueTotal + ' 条。服务器已封死：无论有没有筛选条件，第 ' + (HL_ALL + 1) + ' 条起全是与第 1 页重复的假数据，无法获取更多。本次仅抓取前 ' + actualCount + ' 条真实数据（已自动去重/截断）。'
+                                    }
+                                });
+                            } catch (ep) {}
+                        }
+                        // 最后返回数据给 popup（success=true，照常进入详情提取阶段）
+                        sendResponse({
+                            success: true,
+                            data: allRows,
+                            total: actualCount,
+                            trueTotal: trueTotal,
+                            pageSize: psAll,
+                            hasFilter: false,
+                            truncated: truncAll,
+                            partialSuccess: truncAll,
+                            partialWantedCount: wantAll,
+                            partialActualCount: actualCount
+                        });
+                    } catch (eBigAll) {
+                        console.error('[content:rapidFetchAll] 致命错误:', eBigAll);
+                        sendResponse({ success: false, data: [], error: String(eBigAll && eBigAll.message || eBigAll), _noFallback: true });
+                    }
+                })();
+                return true;
+            }
+
             if (message.action === 'extractList') {
                 var targetPage = Number(message.page) || 1;
 
+                // 🔴 每轮任务的第 1 页：重置跨页去重状态
+                if (targetPage === 1) {
+                    try { _resetApiDupState(); } catch (eDup) {}
+                }
+
                 // ================================================================
-                // 🔴✅ 【优先方案：API 直取 JSON】
-                //      仅对 type=basic（项目基本信息）生效，且 filters.fetchMode !== 'dom'
-                //      pageSize 取 filters.apiPageSize（用户在 popup 填的，默认 100）
-                //      支持用户填的筛选条件（projectName/cityId/orgName 等）+ 验证码
+                // 🔴 方案：API 直取 JSON（深度融合后：只有「极速模式」一套，自动识别筛选条件）
+                //   fetchMode='smart' 或 fetchMode='api' 都走同一个入口 fetchListRapid（兼容老配置）
+                //     • 无筛选条件 → 按 popup 的 pageNum=N&pageSize=M 正常分页（无验证码、无310条限制）
+                //     • 有筛选条件 → 带筛选参数 + 验证码 + 310条极限判断 + 一次性优化（省验证码）
                 // ================================================================
                 var incomingFilters = message.filters || {};
-                var wantApiMode = (incomingFilters.fetchMode !== 'dom');
-                if (message.type === 'basic' && wantApiMode) {
+                var fetchMode = String(incomingFilters.fetchMode || 'dom');
+                var supportedApiTypes = { 'basic': true, 'permit': true, 'complete': true };
+                var msgType = message.type;
+                if (supportedApiTypes[msgType] && (fetchMode === 'smart' || fetchMode === 'api')) {
                     try {
-                        var userPageSize = Math.min(500, Math.max(10, Number(incomingFilters.apiPageSize) || 100));
-                        console.log('[content] 🚀 extractList type=basic → API 直取模式 (fetchMode=' + incomingFilters.fetchMode + ', pageSize=' + userPageSize + '), page=' + targetPage);
-                        fetchBasicListPageSmart(targetPage, userPageSize, function (res) {
+                        function sendApiResp(res) {
                             try {
                                 if (res && res.aborted) {
-                                    // 🚫 用户点了中止爬取 → 透传给 popup 立即停止
                                     console.warn('[content] 🚫 收到用户中止爬取标志，通知 popup 停止');
-                                    sendResponse({
-                                        data: [],
-                                        page: targetPage,
-                                        currentPage: targetPage,
-                                        rowCount: 0,
-                                        aborted: true,
-                                        via: res.via || 'api'
-                                    });
+                                    sendResponse({ data: [], page: targetPage, currentPage: targetPage, rowCount: 0, aborted: true, via: res.via || 'api' });
                                 } else if (res && res.success) {
                                     var info = '🟢 extractList via=' + res.via + ', page=' + targetPage + ', 条数=' + res.data.length + ', total=' + res.total;
                                     if (res.duplicate) info += ' [⚠️ 本页与上一页重复]';
                                     if (res.needCaptcha) info += ' [需验证码]';
+                                    if (res.truncated) info += ' [⚠️ 截断，仅前N条]';
+                                    if (res.beyondLimit) info += ' [🚫 超310条极限]';
+                                    if (res.hasFilter === true) info += ' [有筛选]';
+                                    if (res.hasFilter === false) info += ' [无筛选]';
                                     console.log('[content] ' + info);
-                                    sendResponse({
-                                        data: res.data,
-                                        page: targetPage,
-                                        currentPage: targetPage,
-                                        rowCount: res.data.length,
-                                        via: res.via,
-                                        total: res.total || 0,
-                                        totalPages: res.totalPages || 0,
-                                        pageSizeApi: res.pageSize || 0,
-                                        duplicate: !!res.duplicate,
-                                        needCaptcha: !!res.needCaptcha,
-                                        filterParams: res.filterParams || {},
-                                        aborted: false
-                                    });
+                                    var baseResp = {
+                                        data: res.data, page: targetPage, currentPage: targetPage,
+                                        rowCount: res.data.length, via: res.via,
+                                        total: res.total || 0, totalPages: res.totalPages || 0,
+                                        pageSizeApi: res.pageSize || 0, duplicate: !!res.duplicate,
+                                        needCaptcha: !!res.needCaptcha, filterParams: res.filterParams || {},
+                                        aborted: false,
+                                        // 🔴 透传"本次请求有没有带筛选条件"，让 popup 决定是否用"累计条数>310"的硬规则提醒
+                                        hasFilter: (res.hasFilter === true)
+                                    };
+                                    if (res.truncated === true) baseResp.truncated = true;
+                                    if (res.beyondLimit === true) baseResp.beyondLimit = true;
+                                    if (typeof res.realTotal === 'number') baseResp.realTotal = res.realTotal;
+                                    if (typeof res.hardLimit === 'number') baseResp.hardLimit = res.hardLimit;
+                                    if (res.filteredLimitReached === true) baseResp.filteredLimitReached = true;
+                                    if (res.filteredLimitMsg) baseResp.filteredLimitMsg = res.filteredLimitMsg;
+                                    sendResponse(baseResp);
                                 } else {
                                     console.warn('[content] 🔴 extractList API方案失败：', (res && res.error) || '未知');
-                                    sendResponse({
-                                        data: [],
-                                        error: (res && res.error) || '未知错误',
-                                        page: targetPage,
-                                        rowCount: 0
-                                    });
+                                    var errResp = { data: [], error: (res && res.error) || '未知错误', page: targetPage, rowCount: 0 };
+                                    if (res && res.beyondLimit === true) {
+                                        errResp.beyondLimit = true;
+                                        if (typeof res.realTotal === 'number') errResp.realTotal = res.realTotal;
+                                        if (typeof res.hardLimit === 'number') errResp.hardLimit = res.hardLimit;
+                                    }
+                                    sendResponse(errResp);
                                 }
-                            } catch (srErr) {
-                                console.error('[content] sendResponse 异常:', srErr);
+                            } catch (srErr) { console.error('[content] sendResponse 异常:', srErr); }
+                        }
+
+                        // 🔴 合并：统一调用 fetchListRapid（极速模式【唯一入口】，内部自动判断是否有筛选条件）
+                        console.log('[content] 🚀 extractList type=' + msgType + ' → 极速模式（深度融合精准）, fetchMode=' + fetchMode + ', page=' + targetPage + ', filters=', incomingFilters);
+                        fetchListRapid(msgType, targetPage, function (res) {
+                            // 🔴 兜底补 hasFilter 字段（理论上 fetchListRapid 所有分支都已设置，这里只是最后保险）
+                            if (res && res.success && typeof res.hasFilter === 'undefined') {
+                                try {
+                                    var fpCheck = collectSmartFilterParams(msgType);
+                                    res.hasFilter = _hasAnyFilter(fpCheck);
+                                } catch (eHf) { res.hasFilter = false; }
                             }
-                        });
+                            sendApiResp(res);
+                        }, incomingFilters);
                         return true; // 必须异步 return true
                     } catch (apiBigErr) {
-                        console.warn('[content] API 方案异常，回退原有 DOM 流程：', apiBigErr);
-                        // 出错就 fallthrough 到下面的 DOM 方案
+                        // 🔴 用户明确要求：极速模式（fetchMode=api/smart）API 失败就失败，不要再回退 DOM（回退只会拿到当前页 10 条，误导判断）
+                        console.error('[content] 🔴 极速模式 extractList 顶层异常（不再回退 DOM）：', apiBigErr && apiBigErr.message ? apiBigErr.message : apiBigErr, apiBigErr && apiBigErr.stack ? apiBigErr.stack : '');
+                        try {
+                            sendResponse({
+                                data: [],
+                                error: '极速模式异常: ' + ((apiBigErr && apiBigErr.message) || String(apiBigErr)),
+                                page: targetPage,
+                                rowCount: 0,
+                                via: 'api-fatal',
+                                _noFallback: true
+                            });
+                        } catch (eSend) {}
+                        return true; // 🔴 异步 return true，阻止 fallthrough 到 DOM 方案（彻底禁回退）
                     }
-                } else if (message.type === 'basic' && !wantApiMode) {
-                    console.log('[content] 🔨 extractList type=basic → 用户选择了兼容模式（老方法 DOM 翻页），跳过 API 方案');
+                } else if (supportedApiTypes[msgType] && fetchMode === 'dom') {
+                    console.log('[content] 🔨 extractList type=' + msgType + ' → 用户选择了兼容模式（老方法 DOM 翻页），跳过 API 方案');
                 }
 
                 // ================================================================

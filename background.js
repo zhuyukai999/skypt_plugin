@@ -2,24 +2,25 @@
 var extractedResults = { basic: [], permit: [], complete: [] };
 var detailCompleteFlags = { basic: false, permit: false, complete: false };
 var stopFlags = { basic: false, permit: false, complete: false };
-var detailTabs = new Map(); // tabId -> { type, created }
 
-// ===== 🔴 全局串行队列：仿真点击一次只能跑一个，彻底杜绝竞态/重复打开/监听器互相干扰 =====
-var simulateQueue = []; // 待执行项: { message, sender, sendResponse }
-var simulateQueueRunning = false;
-function runNextSimulate() {
-  if (simulateQueueRunning) return;
-  if (simulateQueue.length === 0) return;
-  simulateQueueRunning = true;
-  var next = simulateQueue.shift();
-  console.log('[bg] 🎯 仿真队列: 开始执行, 剩余队列=' + simulateQueue.length);
-  // 复用现有处理函数（包装成 doFindClickAndExtractDetail）
-  doFindClickAndExtractDetail(next.message, next.sender, function (resp) {
-    try { next.sendResponse(resp); } catch (e) {}
-    simulateQueueRunning = false;
-    // 500ms 后再出队，给浏览器清理 tab、GC 的喘息时间
-    setTimeout(runNextSimulate, 500);
-  });
+// ===== 🔴天眼查补全：stop flag =====
+var tianyanchaStopFlag = false;
+
+function findAnyTianyanchaTab(callback) {
+  try {
+    chrome.tabs.query({ url: ['*://pro.tianyancha.com/*','*://www.tianyancha.com/*','*://tianyancha.com/*'] }, function (tabs) {
+      if (!tabs || !tabs.length) { callback(null); return; }
+      var first = null;
+      var active = null;
+      for (var i = 0; i < tabs.length; i++) {
+        var t = tabs[i];
+        if (!t || !t.id || !t.url) continue;
+        if (!first) first = t;
+        if (t.active) active = t;
+      }
+      callback(active || first);
+    });
+  } catch (e) { callback(null); }
 }
 
 // ===== 🔴✅✅✅ 显示模式切换（弹窗/侧边栏/新窗口）终极统一处理 =====
@@ -282,7 +283,8 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     var url = message.url;
     var type = message.type;
     var rowIndex = message.rowIndex || 0;
-    console.log('[bg] ⭐ openAndExtractDetail 收到请求: type=' + type + ', rowIndex=' + rowIndex + ', url=' + url.slice(0, 120));
+    var _dbgReason = ''; // 🔴 诊断：记录为什么 fallback 到开 tab
+    console.log('%c[bg] ⭐ openAndExtractDetail 收到请求: type=' + type + ', rowIndex=' + rowIndex + ', url=' + (url || '').slice(0, 200), 'background:#1677ff;color:#fff;padding:2px 6px;border-radius:3px;');
 
     if (!url || !type) {
       sendResponse({ success: false, error: '缺少参数' });
@@ -295,54 +297,65 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     }
 
     // =========================================================================
-    // 🔴✅ 方案一：basic / permit 优先走纯接口 fetch（0 干扰，不开新 tab！）
-    //   - 成功：直接返回，完全不产生新 tab，用户 0 感知
-    //   - 失败（没 code / 没 skypt tab / 接口错 / 字段少）：fallback 到原来的开 tab 逻辑兜底
+    // 🔴✅ 唯一主路径：basic / permit / complete 全部走纯接口 fetch（0 干扰，不开新 tab，完全禁用仿真点击兜底！）
     // =========================================================================
-    if (type === 'basic' || type === 'permit') {
+    if (type === 'basic' || type === 'permit' || type === 'complete') {
       var codeToFetch = '';
       try {
-        try {
-          var urlObj = new URL(url);
-          var hash = urlObj.hash || '';
-          var qpIdx = hash.indexOf('?');
-          if (qpIdx !== -1) {
-            var qs = hash.slice(qpIdx + 1);
-            var sp = new URLSearchParams(qs);
-            if (type === 'basic') codeToFetch = sp.get('projectCode') || '';
-            if (type === 'permit') codeToFetch = sp.get('permitCode') || '';
+        // 🔴 complete：不从 URL 解析，直接从 listRow._acceptanceId 拿数字 ID（列表 API 的 src.id）
+        if (type === 'complete') {
+          try {
+            if (message && message.listRow && message.listRow._acceptanceId) {
+              codeToFetch = String(message.listRow._acceptanceId || '').trim();
+            }
+          } catch (eCA) {}
+          if (!/^\d+$/.test(codeToFetch)) codeToFetch = '';
+        } else {
+          try {
+            var urlObj = new URL(url);
+            var hash = urlObj.hash || '';
+            var qpIdx = hash.indexOf('?');
+            if (qpIdx !== -1) {
+              var qs = hash.slice(qpIdx + 1);
+              var sp = new URLSearchParams(qs);
+              if (type === 'basic') codeToFetch = sp.get('projectCode') || '';
+              if (type === 'permit') codeToFetch = sp.get('permitCode') || '';
+            }
+          } catch (eu1) { _dbgReason += 'urlParseErr(' + (eu1 && eu1.message || eu1) + ') '; }
+          if (!codeToFetch) {
+            var rx = type === 'basic' ? /[?&]projectCode=([^&#]+)/ : /[?&]permitCode=([^&#]+)/;
+            var m = url.match(rx);
+            if (m) codeToFetch = decodeURIComponent(m[1]);
           }
-        } catch (eu1) {}
-        if (!codeToFetch) {
-          var rx = type === 'basic' ? /[?&]projectCode=([^&#]+)/ : /[?&]permitCode=([^&#]+)/;
-          var m = url.match(rx);
-          if (m) codeToFetch = decodeURIComponent(m[1]);
         }
-      } catch (euBig) {}
+      } catch (euBig) { _dbgReason += 'bigUrlErr(' + (euBig && euBig.message || euBig) + ') '; }
       codeToFetch = (codeToFetch || '').trim();
 
       if (codeToFetch) {
-        console.log('[bg] 🚀 ' + type + ' 优先尝试纯接口（不开tab）: code=' + codeToFetch);
+        console.log('[bg] 🚀 ' + type + ' 纯接口提取（不开tab，无兜底）: code=' + codeToFetch);
         _findAnySkyptTab(function (tab) {
           if (!tab || !tab.id) {
-            console.log('[bg]  ⚠️ 无可用 skypt tab → fallback 开新 tab');
-            fallbackCreateTab();
+            _dbgReason += 'noSkyptTab ';
+            console.warn('[bg] ❌ 提取失败：无可用 skypt tab。reason=' + _dbgReason);
+            sendResponse({ success: false, data: {}, error: '无可用 skypt 页面（列表页被关了？）：' + _dbgReason });
             return;
           }
           ensureContentScript(tab.id, tab.url, function (ok) {
             if (!ok) {
-              console.log('[bg]  ⚠️ content 注入失败 → fallback 开新 tab');
-              fallbackCreateTab();
+              _dbgReason += 'contentInjectFail ';
+              console.warn('[bg] ❌ 提取失败：content 注入失败。reason=' + _dbgReason);
+              sendResponse({ success: false, data: {}, error: 'content 注入失败：' + _dbgReason });
               return;
             }
             var fetchTimeoutT = null;
-            var fallbackStarted = false;
+            var done = false;
             try {
               fetchTimeoutT = setTimeout(function () {
-                if (fallbackStarted) return;
-                fallbackStarted = true;
-                console.log('[bg]  ⚠️ fetch 超时(25s) → fallback 开新 tab');
-                fallbackCreateTab();
+                if (done) return;
+                done = true;
+                _dbgReason += 'fetchTimeout25s ';
+                console.warn('[bg] ❌ 提取失败：超时(25s)。reason=' + _dbgReason);
+                sendResponse({ success: false, data: {}, error: '纯接口请求超时(25s)：' + _dbgReason });
               }, 25000);
             } catch (eST) {}
 
@@ -351,6 +364,10 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
               if (message && message.listRow && typeof message.listRow === 'object') {
                 if (type === 'basic') extra.listLevel = message.listRow['数据等级'] || '';
                 if (type === 'permit') {
+                  extra.listLevel = message.listRow['数据等级'] || '';
+                  extra.listProjectName = message.listRow['工程名称'] || '';
+                }
+                if (type === 'complete') {
                   extra.listLevel = message.listRow['数据等级'] || '';
                   extra.listProjectName = message.listRow['工程名称'] || '';
                 }
@@ -365,158 +382,55 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
                 extra: extra
               }, function (resp) {
                 try { if (fetchTimeoutT) { clearTimeout(fetchTimeoutT); fetchTimeoutT = null; } } catch (eClr) {}
-                if (fallbackStarted) return;
+                if (done) return;
                 if (chrome.runtime.lastError) {
-                  console.warn('[bg]  ⚠️ fetch sendMessage 失败: ' + chrome.runtime.lastError.message + ' → fallback 开新 tab');
-                  fallbackStarted = true;
-                  fallbackCreateTab();
+                  done = true;
+                  _dbgReason += 'sendMsgFail(' + chrome.runtime.lastError.message + ') ';
+                  console.warn('[bg] ❌ 提取失败：sendMessage 异常。reason=' + _dbgReason);
+                  sendResponse({ success: false, data: {}, error: 'sendMessage 失败：' + _dbgReason });
                   return;
                 }
                 var fc = (resp && resp.data) ? Object.keys(resp.data).length : 0;
-                if (resp && (resp.success === true) && fc >= 2) {
-                  console.log('[bg] 🟢 ' + type + ' 纯接口提取成功！(字段数=' + fc + '，不开新 tab，用户0感知) via=' + (resp.via || ''));
+                console.log('[bg] ℹ️ fetchDetail 回调: success=' + (resp && resp.success) + ', fieldCount=' + fc + ', respKeys=' + (resp ? Object.keys(resp).join(',') : '-') + ', error=' + (resp && resp.error ? resp.error : ''));
+                if (resp && (resp.success === true) && fc >= 3) {
+                  done = true;
+                  console.log('[bg] 🟢 ' + type + ' 纯接口提取成功！(字段数=' + fc + '，不开新 tab，无兜底) via=' + (resp.via || ''));
                   if (!extractedResults[type]) extractedResults[type] = [];
                   extractedResults[type][rowIndex] = resp.data || {};
                   sendResponse({ success: true, data: resp.data || {}, fieldCount: fc, via: 'api-fetch' });
                 } else {
-                  console.warn('[bg]  ⚠️ 接口返回字段数=' + fc + '太少，fallback 开新 tab。error=' + (resp && resp.error ? resp.error : ''));
-                  fallbackStarted = true;
-                  fallbackCreateTab();
+                  done = true;
+                  _dbgReason += 'fieldCountLow(' + fc + ', need≥3) ';
+                  if (resp && resp.error) _dbgReason += 'respErr(' + resp.error + ') ';
+                  console.warn('[bg] ❌ 提取失败：接口返回字段数=' + fc + ' 太少 或 success≠true。reason=' + _dbgReason, resp);
+                  sendResponse({ success: false, data: {}, error: '纯接口返回无效（字段数=' + fc + '，需≥3）：' + _dbgReason });
                 }
               });
             } catch (eSend) {
-              console.warn('[bg]  ⚠️ sendMessage 异常 → fallback 开新 tab:', eSend);
-              if (!fallbackStarted) { fallbackStarted = true; fallbackCreateTab(); }
+              if (!done) {
+                done = true;
+                _dbgReason += 'sendMsgException(' + (eSend && eSend.message || eSend) + ') ';
+                console.warn('[bg] ❌ 提取失败：sendMessage 抛异常。reason=' + _dbgReason, eSend);
+                sendResponse({ success: false, data: {}, error: 'sendMessage 异常：' + _dbgReason });
+              }
             }
           });
         });
         return true; // 异步！
       } else {
-        console.log('[bg]  ⚠️ ' + type + ' URL 里没找到 code，fallback 开新 tab');
+        _dbgReason += 'noCode(url=' + url.slice(0, 200) + ') ';
+        console.warn('[bg] ❌ 提取失败：没找到有效 code（basic=projectCode, permit=permitCode, complete=数字acceptanceId）。reason=' + _dbgReason);
+        sendResponse({ success: false, data: {}, error: '无法定位详情主键：' + _dbgReason });
+        return true;
       }
     }
 
-    // ====== 🔴 fallback（兜底）：原来的开 tab + 注入 + DOM 提取逻辑（完全保留） ======
+    // ====== 🔴 已完全禁用仿真点击兜底（开 tab + 注入 + DOM 提取）======
     function fallbackCreateTab() {
-    chrome.tabs.create({ url: url, active: false }, function (tab) {
-      if (chrome.runtime.lastError || !tab || !tab.id) {
-        var err = chrome.runtime.lastError ? chrome.runtime.lastError.message : '创建标签失败';
-        console.error('[bg] 创建标签失败:', err);
-        sendResponse({ success: false, error: err });
-        return;
-      }
-
-      var tabId = tab.id;
-      detailTabs.set(tabId, { type: type, created: Date.now() });
-      console.log('[bg]  已创建标签页 tabId=' + tabId);
-
-      var waited = 0;
-      var waitInterval = 400;
-      var maxWait = 15000;
-      var scriptInjected = false;
-      var finished = false;
-
-      function cleanupAndSend(result) {
-          if (finished) return;
-          finished = true;
-          detailTabs.delete(tabId);
-          var dataSize = result && result.data ? Object.keys(result.data).length : 0;
-          console.log('[bg] 🔚 详情提取完成 tabId=' + tabId + ', success=' + (result && result.success) + ', 字段数=' + dataSize + (result && result.error ? ', error=' + result.error : ''));
-          try {
-              chrome.tabs.remove(tabId, function () {
-                  sendResponse(result);
-              });
-          } catch (e) {
-              sendResponse(result);
-          }
-      }
-
-      function sendExtractMessage() {
-        if (stopFlags[type]) {
-          cleanupAndSend({ success: false, error: '用户已停止' });
-          return;
-        }
-        console.log('[bg]  发送 extractDetail 消息给 tabId=' + tabId + ', type=' + type);
-        chrome.tabs.sendMessage(tabId, { action: 'extractDetail', type: type }, function (resp) {
-          if (chrome.runtime.lastError) {
-            var errmsg = chrome.runtime.lastError.message;
-            console.warn('[bg]   sendMessage 失败: ' + errmsg + ', waited=' + waited);
-            if (waited < maxWait + 3000) {
-              waited += 800;
-              setTimeout(sendExtractMessage, 800);
-              return;
-            }
-            cleanupAndSend({ success: false, error: '无法与页面通信: ' + errmsg });
-            return;
-          }
-
-          var data = (resp && resp.data) ? resp.data : {};
-          var fc = Object.keys(data).length;
-          console.log('[bg]   收到响应，字段数=' + fc, data);
-
-          if (fc < 5 && !sendExtractMessage._retried) {
-            sendExtractMessage._retried = true;
-            console.log('[bg]   字段数=' + fc + '太少（DOM未渲染完），1500ms 后重试一次');
-            waited += 1500;
-            setTimeout(sendExtractMessage, 1500);
-            return;
-          }
-
-          if (!extractedResults[type]) extractedResults[type] = [];
-          extractedResults[type][rowIndex] = data;
-
-          cleanupAndSend({ success: true, data: data });
-        });
-      }
-
-      function tryInjectAndExtract() {
-        if (stopFlags[type]) {
-          cleanupAndSend({ success: false, error: '用户已停止' });
-          return;
-        }
-
-        chrome.tabs.get(tabId, function (t) {
-          if (chrome.runtime.lastError || !t) {
-            console.error('[bg]  标签页不存在 tabId=' + tabId);
-            cleanupAndSend({ success: false, error: '标签页不存在' });
-            return;
-          }
-
-          if (t.status === 'complete' || waited >= maxWait) {
-            console.log('[bg]  页面 status=' + t.status + ', waited=' + waited + 'ms → 开始注入+提取');
-            if (!scriptInjected) {
-              ensureContentScript(tabId, url, function (ok) {
-                scriptInjected = true;
-                if (ok) {
-                  setTimeout(sendExtractMessage, 2500);
-                } else {
-                  if (waited < maxWait + 2000) {
-                    waited += 1000;
-                    setTimeout(tryInjectAndExtract, 1000);
-                  } else {
-                    console.warn('[bg]  注入失败，返回空结果');
-                    cleanupAndSend({ success: true, data: {} });
-                  }
-                }
-              });
-            } else {
-              sendExtractMessage();
-            }
-          } else {
-            waited += waitInterval;
-            if (waited % 2000 === 0) console.log('[bg]  等待页面加载... tabId=' + tabId + ', waited=' + waited + 'ms, status=' + t.status);
-            setTimeout(tryInjectAndExtract, waitInterval);
-          }
-        });
-      }
-
-      setTimeout(tryInjectAndExtract, 1000);
-    });
-    } // end fallbackCreateTab
-    // basic/permit 走到这里（没 code 或之前代码还没执行），手动调一下 fallback（但一般前面 codeToFetch 判断已经覆盖了）
-    if (!(type === 'basic' || type === 'permit') || !codeToFetch) {
-      fallbackCreateTab();
+      console.warn('[bg] 🚫 【已禁用】仿真点击/开新tab兜底 已被弃用！不再 fallback。type=' + type + ', url=' + (url || '').slice(0, 200));
+      sendResponse({ success: false, data: {}, error: '已弃用仿真点击兜底方案（当前仅支持纯接口详情提取）' });
     }
+    fallbackCreateTab(); // 兼容其他未知分支，确保一定有 sendResponse
     return true;
   }
 
@@ -550,13 +464,6 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     } else {
       stopFlags = { basic: true, permit: true, complete: true };
     }
-    // 关闭所有详情标签
-    detailTabs.forEach(function (info, tabId) {
-      if (!message.type || info.type === message.type) {
-        try { chrome.tabs.remove(tabId); } catch (e) {}
-        detailTabs.delete(tabId);
-      }
-    });
     sendResponse({ success: true });
     return true;
   }
@@ -582,453 +489,82 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     return true;
   }
 
-  // ============ 🔴 仿真点击列表项目名称进入详情页提取（入全局串行队列）============
+  // ====== 🔴天眼查补全：stop 开关 ======
+  //   message.stop 有 3 种情况：
+  //     true  → 设为停止
+  //     false → 重置为未停止（开始新任务前）
+  //     undefined（不传）→ 仅读取，不修改（popup 轮询判断是否该 break）
+  if (message.action === 'tianyanchaSetStop') {
+    if (message.stop === true || message.stop === false) {
+      tianyanchaStopFlag = !!message.stop;
+    }
+    sendResponse({ success: true, stop: tianyanchaStopFlag });
+    return true;
+  }
+
+  // ====== 🔴天眼查补全：在天眼查 tab 里执行 suggest + 详情解析 ======
+  if (message.action === 'tianyanchaQuery') {
+    var companyName = String(message.companyName || '').trim();
+    if (!companyName) { sendResponse({ success: false, error: '公司名为空' }); return true; }
+    (function () {
+      try {
+        findAnyTianyanchaTab(function (tab) {
+          if (!tab || !tab.id) {
+            sendResponse({ success: false, error: '未找到天眼查标签页（请先打开并登录 pro.tianyancha.com）' });
+            return;
+          }
+          ensureContentScript(tab.id, tab.url, function (ok) {
+            if (!ok) {
+              sendResponse({ success: false, error: '天眼查 content.js 注入失败' });
+              return;
+            }
+            var done = false;
+            var tm = null;
+            try {
+              tm = setTimeout(function () {
+                if (done) return;
+                done = true;
+                sendResponse({ success: false, error: '天眼查查询超时(60s)' });
+              }, 60000);
+            } catch (eTm) {}
+            try {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'queryTianyancha',
+                companyName: companyName,
+                matchMode: message.matchMode || 'smart'
+              }, function (resp) {
+                try { if (tm) { clearTimeout(tm); tm = null; } } catch (eClr) {}
+                if (done) return;
+                done = true;
+                if (chrome.runtime.lastError) {
+                  sendResponse({ success: false, error: '天眼查通信失败: ' + chrome.runtime.lastError.message });
+                  return;
+                }
+                sendResponse(resp || { success: false, error: '天眼查无响应' });
+              });
+            } catch (eSend) {
+              try { if (tm) { clearTimeout(tm); tm = null; } } catch (eClr2) {}
+              if (done) return;
+              done = true;
+              sendResponse({ success: false, error: '天眼查发送异常: ' + (eSend && eSend.message || eSend) });
+            }
+          });
+        });
+      } catch (eBig) { sendResponse({ success: false, error: String(eBig && eBig.message || eBig) }); }
+    })();
+    return true; // 异步
+  }
+
+  // ============ 🔴 【已完全弃用】仿真点击列表项目名称进入详情页提取 ============
   if (message.action === 'findClickAndExtractDetail') {
     var locator = message.locator || {};
-    console.log('[bg] 🖱️ findClickAndExtractDetail 收到请求并入队: type=' + message.type + ', 项目名=' + (locator.projectName || '?') + ', 当前队列长度=' + (simulateQueue.length + 1));
-    simulateQueue.push({ message: message, sender: sender, sendResponse: sendResponse });
-    setTimeout(runNextSimulate, 0);
-    return true; // 异步 sendResponse
+    console.warn('[bg] 🚫 【已禁用】仿真点击 findClickAndExtractDetail 已弃用！不再点列表/弹Modal/开新tab。type=' + message.type + ', 项目名=' + (locator.projectName || '?'));
+    sendResponse({ success: false, data: {}, error: '仿真点击已弃用（当前仅支持纯接口详情提取）' });
+    return true;
   }
 
   sendResponse({ success: false, error: '未知操作' });
   return true;
 });
-
-// ============ 🔴 仿真点击的真正执行函数（被全局串行队列调用）============
-function doFindClickAndExtractDetail(message, sender, qCallback) {
-  var locator = message.locator || {};
-  var type = message.type;
-  var rowIndex = message.rowIndex || 0;
-
-  if (!locator || !locator.listUrl) {
-    qCallback({ success: false, error: '缺少定位器或列表URL' });
-    return;
-  }
-  if (stopFlags[type]) {
-    qCallback({ success: false, error: '用户已停止' });
-    return;
-  }
-
-  // 🔴✅ 竣工验收备案(type=complete)：优先「接口纯 fetch」（拿到数字ID → 0干扰不弹Modal）；拿不到 ID 才 fallback 到「点列表弹 Modal」兜底
-  if (type === 'complete') {
-    var doneCalled_c = false;
-    function done_c(result) {
-      if (doneCalled_c) return;
-      doneCalled_c = true;
-      var dataSize = (result && result.data) ? Object.keys(result.data).length : 0;
-      var via = (result && result.via) ? ('[via=' + result.via + '] ') : '';
-      console.log('[bg] 🧾✅ 竣工验收备案(type=complete)提取完成 ' + via + 'success=' + (result && result.success) + ', 字段数=' + dataSize + (result && result.error ? ', error=' + result.error : ''));
-      qCallback(result);
-    }
-    var accId = '';
-    try {
-      accId = String((locator.acceptanceId !== undefined && locator.acceptanceId !== null) ? locator.acceptanceId : '').trim();
-      if (!accId && message.listRow && message.listRow._acceptanceId) accId = String(message.listRow._acceptanceId || '').trim();
-    } catch (eAcc) { accId = ''; }
-
-    // 1) 找 locator.listUrl 对应的 tab（就是我们的列表页）
-    chrome.tabs.query({ url: '*://skypt.gdcic.net/*' }, function (allTabs) {
-      var listTab = null;
-      for (var i = 0; i < allTabs.length; i++) {
-        var t = allTabs[i];
-        if (t && t.url && (t.url === locator.listUrl || t.url.split('#')[0] === locator.listUrl.split('#')[0] || (t.url.indexOf('/project?type=6') !== -1 && locator.listUrl.indexOf('/project?type=6') !== -1))) {
-          listTab = t; break;
-        }
-      }
-      if (!listTab) {
-        for (var j = 0; j < allTabs.length; j++) {
-          var tt = allTabs[j];
-          if (tt && tt.url && tt.url.indexOf('openplatform/') !== -1 && tt.url.indexOf('/project?type=6') !== -1) {
-            listTab = tt; break;
-          }
-        }
-      }
-      if (!listTab || !listTab.id) {
-        done_c({ success: false, error: '找不到竣工验收备案列表页 tab' });
-        return;
-      }
-
-      var listTabId = listTab.id;
-      console.log('[bg] 🧾 找到竣工验收备案列表页 tabId=' + listTabId + ', url=' + listTab.url + (accId ? ', 有数字ID=' + accId + ' → 优先走接口' : ', 无数字ID → fallback弹Modal'));
-
-      ensureContentScript(listTabId, listTab.url, function (ok) {
-        if (!ok) {
-          done_c({ success: false, error: 'content script 注入失败 tabId=' + listTabId });
-          return;
-        }
-
-        // =========================================================================
-        // 🔴✅ 路径 A（优先）：有数字 acceptanceId → 纯接口 fetch（0 干扰，不弹 Modal）
-        //     真实接口：GET /api/openplatform/projectAcceptanceArchive/get/{数字ID}（来自用户cURL）
-        // =========================================================================
-        if (accId && /^\d+$/.test(accId)) {
-          var fetchAccTimeout = null;
-          var accFallbackStarted = false;
-          try {
-            fetchAccTimeout = setTimeout(function () {
-              if (accFallbackStarted) return;
-              accFallbackStarted = true;
-              console.warn('[bg] 🧾 接口超时（25s）→ fallback 弹 Modal');
-              fallbackClickAndModal();
-            }, 25000);
-          } catch (eTM) {}
-          try {
-            var listRowForApi = (locator.listRow && typeof locator.listRow === 'object') ? locator.listRow : (message.listRow || {});
-            chrome.tabs.sendMessage(listTabId, {
-              action: 'fetchDetail',
-              type: 'complete',
-              code: accId,
-              extra: { listRow: listRowForApi }
-            }, function (resp) {
-              try { if (fetchAccTimeout) { clearTimeout(fetchAccTimeout); fetchAccTimeout = null; } } catch (eClr) {}
-              if (accFallbackStarted) return;
-              if (chrome.runtime.lastError) {
-                console.warn('[bg] 🧾 接口 sendMessage 失败 → fallback 弹 Modal: ' + chrome.runtime.lastError.message);
-                accFallbackStarted = true;
-                fallbackClickAndModal();
-                return;
-              }
-              var fc = (resp && resp.data) ? Object.keys(resp.data).length : 0;
-              if (resp && resp.success && fc >= 3) {
-                done_c({ success: true, data: resp.data || {}, fieldCount: fc, via: 'api-fetch' });
-              } else {
-                console.warn('[bg] 🧾 接口返回字段数=' + fc + '太少（需≥3）→ fallback 弹 Modal。error=' + (resp && resp.error ? resp.error : ''));
-                accFallbackStarted = true;
-                fallbackClickAndModal();
-              }
-            });
-          } catch (eSendApi) {
-            console.warn('[bg] 🧾 接口调用异常 → fallback 弹 Modal:', eSendApi);
-            if (!accFallbackStarted) { accFallbackStarted = true; fallbackClickAndModal(); }
-          }
-          return;
-        }
-
-        // =========================================================================
-        // 🔴 路径 B（兜底）：没数字 ID / 接口失败 → 走原来的仿真点链接 + 弹 Modal 提取
-        // =========================================================================
-        fallbackClickAndModal();
-
-        function fallbackClickAndModal() {
-          var contentTimeout = setTimeout(function () {
-            done_c({ success: false, error: '竣工验收备案 content 提取超时(35s)', data: {}, via: 'modal-fallback' });
-          }, 35000);
-          setTimeout(function () {
-            chrome.tabs.sendMessage(listTabId, { action: 'extractCompleteModal', rowIndex: rowIndex, locator: locator }, function (resp) {
-              try { clearTimeout(contentTimeout); } catch (e) {}
-              if (chrome.runtime.lastError) {
-                console.warn('[bg] 🧾 sendMessage extractCompleteModal 失败: ' + chrome.runtime.lastError.message);
-                done_c({ success: false, error: chrome.runtime.lastError.message, data: {}, via: 'modal-fallback' });
-                return;
-              }
-              var out = resp || { success: false, error: '无响应' };
-              out.via = (out.via ? out.via : 'modal');
-              done_c(out);
-            });
-          }, 300);
-        }
-      });
-    });
-
-    return; // 🔴 竣工验收备案：到这里就结束了，下面的 basic/permit 逻辑完全不执行！
-  }
-
-  // 下面保持原样（basic/permit 仿真点击：创建新 tab + 监听跳转 + 提取）
-  var listTabId = null;
-  var newDetailTabId = null;
-  var waited = 0;
-  var scriptInjected = false;
-  var clickFinished = false;
-  var clickFinishedAt = 0;  // 🔴 新增：记录点击发生时间戳，做时间窗口过滤
-  var finished = false;
-  var checkTimer = null;
-  var createdTabIds = [];
-  var toRemove = []; // 🔴 移到外层：待清理的 tabIds，checkCandidateDetailTabs 会追加多余重复打开的
-    var MAX_WAIT = 30000;
-    var STARTED_AT = Date.now(); // 🔴 新增：本任务开始时间，用于兜底扫尾 tab
-
-    function cleanupAndSend(result) {
-      if (finished) return;
-      finished = true;
-      if (checkTimer) { try { clearInterval(checkTimer); } catch (e) {} checkTimer = null; }
-      try { chrome.tabs.onCreated.removeListener(handleTabCreated); } catch (e) {}
-
-      // 两个核心 tab（显式识别的）加入清理列表（toRemove 里已经有 checkCandidateDetailTabs 追加的多余 tab 了）
-      if (listTabId && toRemove.indexOf(listTabId) === -1) toRemove.push(listTabId);
-      if (newDetailTabId && toRemove.indexOf(newDetailTabId) === -1) toRemove.push(newDetailTabId);
-      detailTabs.delete(listTabId);
-      detailTabs.delete(newDetailTabId);
-      var dataSize = result && result.data ? Object.keys(result.data).length : 0;
-      console.log('[bg] 🖱️🔚 仿真提取完成 success=' + (result && result.success) + ', 字段数=' + dataSize + (result && result.error ? ', error=' + result.error : '') + ', 清理所有tabs:', toRemove);
-
-      function doCloseExplicitThenSweepAndCallback() {
-        // 1. 先关显式识别到的两个 tab
-        function closeNext() {
-          if (toRemove.length === 0) {
-            // 2. 🔴 兜底扫尾：把"本任务开始后创建的、skypt域名、不是当前激活、URL包含列表或详情特征"的 tab 也都关掉
-            try {
-              chrome.tabs.query({}, function (allTabs) {
-                var sweeped = [];
-                var now = Date.now();
-                for (var i = 0; i < allTabs.length; i++) {
-                  var t = allTabs[i];
-                  if (!t || !t.id) continue;
-                  if (t.active) continue; // 不关掉用户正在看的
-                  if (t.pinned) continue;
-                  var u = t.url || '';
-                  if (u.indexOf('skypt.gdcic.net/openplatform/') === -1) continue;
-                  // 只关我们这个任务"开始之后"可能产生的临时 tab（创建时间我们拿不到，就用 tab.id 在 detailTabs 里记录过的 或 URL特征匹配）
-                  var looksLikeOurTempTab = false;
-                  if (u.indexOf('/project?type=') !== -1 && u !== locator.listUrl) looksLikeOurTempTab = true; // 另一个列表页（重复打开的）
-                  if (u.indexOf('/detail?') !== -1 && u.indexOf('projectId=') === -1) looksLikeOurTempTab = true; // 重复的详情页
-                  // 另外：在 detailTabs Map 里但 toRemove 里没有的（就是前面竞态遗留的）
-                  if (detailTabs.has(t.id) && toRemove.indexOf(t.id) === -1) looksLikeOurTempTab = true;
-                  if (looksLikeOurTempTab) sweeped.push(t.id);
-                }
-                if (sweeped.length > 0) {
-                  console.log('[bg] 🖱️🧹 兜底扫尾清理多余 tabIds:', sweeped);
-                  var left = sweeped.slice();
-                  function rmNext() {
-                    if (left.length === 0) { qCallback(result); return; }
-                    var nx = left.shift();
-                    try {
-                      chrome.tabs.remove(nx, function () {
-                        if (chrome.runtime.lastError) { /* ignore */ }
-                        detailTabs.delete(nx);
-                        rmNext();
-                      });
-                    } catch (e) { rmNext(); }
-                  }
-                  rmNext();
-                } else {
-                  qCallback(result);
-                }
-              });
-            } catch (sweepErr) {
-              qCallback(result);
-            }
-            return;
-          }
-          var nx = toRemove.shift();
-          try {
-            chrome.tabs.remove(nx, function () {
-              if (chrome.runtime.lastError) { /* ignore */ }
-              closeNext();
-            });
-          } catch (e) { closeNext(); }
-        }
-        closeNext();
-      }
-      doCloseExplicitThenSweepAndCallback();
-    }
-
-    // 🎯 监听所有新创建的 tab —— 🔴 严格的 clickFinished 之后才记录 + 时间窗口过滤
-    function handleTabCreated(tab) {
-      if (!tab || !tab.id || finished) return;
-      if (listTabId && tab.id === listTabId) return;
-      // 🔴 关键：只有 clickFinished=true（用户点了项目名称）之后创建的新 tab 才可能是详情页！
-      // 坚决丢弃 clickFinished=false 时我们自己创建的临时列表 tab！
-      if (!clickFinished) return;
-      var now = Date.now();
-      if (clickFinishedAt > 0 && (now - clickFinishedAt) > 15000) {
-        // 点击发生超过 15 秒后再出现的新 tab，大概率不是我们的
-        return;
-      }
-      createdTabIds.push(tab.id);
-      console.log('[bg] 🖱️   [onCreated ✅有效] tabId=' + tab.id + ', 距点击=' + (clickFinishedAt ? (now - clickFinishedAt) : '?') + 'ms, url=' + (tab.url || '(加载中)'));
-    }
-
-    function sendExtractMessage(detailTabId) {
-      if (stopFlags[type]) { cleanupAndSend({ success: false, error: '用户已停止' }); return; }
-      console.log('[bg] 🖱️   发送 extractDetail 给详情 tabId=' + detailTabId);
-      ensureContentScript(detailTabId, 'https://skypt.gdcic.net/openplatform/', function (ok) {
-        if (!ok) {
-          if (waited < MAX_WAIT) {
-            waited += 700;
-            setTimeout(function () { sendExtractMessage(detailTabId); }, 700);
-          } else {
-            cleanupAndSend({ success: false, error: '详情页注入content失败' });
-          }
-          return;
-        }
-        setTimeout(function () {
-          chrome.tabs.sendMessage(detailTabId, { action: 'extractDetail', type: type }, function (resp) {
-            if (chrome.runtime.lastError) {
-              console.warn('[bg] 🖱️   详情tab sendMessage 失败: ' + chrome.runtime.lastError.message + ', waited=' + waited);
-              if (waited < MAX_WAIT) {
-                waited += 700;
-                setTimeout(function () { sendExtractMessage(detailTabId); }, 700);
-              } else {
-                cleanupAndSend({ success: false, error: '无法与详情页通信' });
-              }
-              return;
-            }
-            var data = (resp && resp.data) ? resp.data : {};
-            var sz = Object.keys(data).length;
-            console.log('[bg] 🖱️   收到响应字段数=' + sz, sz > 0 ? data : '(空)');
-            if (sz === 0 && waited < MAX_WAIT / 2) {
-              waited += 1000;
-              setTimeout(function () { sendExtractMessage(detailTabId); }, 1000);
-              return;
-            }
-            if (!extractedResults[type]) extractedResults[type] = [];
-            extractedResults[type][rowIndex] = data;
-            cleanupAndSend({ success: true, data: data });
-          });
-        }, 1200);
-      });
-    }
-
-    function checkCandidateDetailTabs() {
-      if (finished || !clickFinished) return;
-      chrome.tabs.query({}, function (allTabs) {
-        if (finished) return;
-        var candidate = null;
-        var normListUrl = locator.listUrl.split('#')[0] + locator.listUrl.split('#')[1];
-        // 优先：onCreated 捕获到的、且不是列表页 URL，且是详情页风格的 tab
-        for (var i = createdTabIds.length - 1; i >= 0; i--) {
-          var t = null;
-          for (var k = 0; k < allTabs.length; k++) {
-            if (allTabs[k].id === createdTabIds[i]) { t = allTabs[k]; break; }
-          }
-          if (!t) continue;
-          var u = t.url || '';
-          if (u.indexOf('skypt.gdcic.net') === -1) continue;
-          // 🔴 严格：候选详情页必须不是列表页（列表页不能当详情页用）
-          if (u.indexOf('/project?type=') !== -1) continue; // 列表页
-          if (u.indexOf('/permit?') !== -1) continue;
-          if (u.indexOf('/complete?') !== -1) continue;
-          // 🔴 最好是包含 detail 关键词的（真·详情页）
-          if (u.indexOf('detail') !== -1 || u.indexOf('projectId=') !== -1 || u.indexOf('projCode=') !== -1 || u.indexOf('id=') !== -1) {
-            candidate = t;
-            break;
-          }
-        }
-        // 兜底1：找 openerTabId === listTabId 的
-        if (!candidate) {
-          for (var j = 0; j < allTabs.length; j++) {
-            if (allTabs[j].openerTabId === listTabId) {
-              var u2 = allTabs[j].url || '';
-              if (u2.indexOf('/project?type=') === -1) {
-                candidate = allTabs[j]; break;
-              }
-            }
-          }
-        }
-        // 兜底2：如果列表 tab 自己 URL 变了（原地跳转）
-        if (!candidate && listTabId) {
-          chrome.tabs.get(listTabId, function (lt) {
-            if (finished) return;
-            if (lt && lt.url && lt.url.indexOf('/project?type=') === -1 && lt.url.indexOf('skypt.gdcic.net') !== -1) {
-              sendExtractMessage(listTabId);
-            } else if (waited >= MAX_WAIT) {
-              cleanupAndSend({ success: false, error: '等待详情页超时' });
-            }
-          });
-          return;
-        }
-        if (candidate) {
-          newDetailTabId = candidate.id;
-          console.log('[bg] 🖱️   ✅ 确定详情页 tabId=' + candidate.id + ', url=' + candidate.url);
-          // 🔴 额外保护：把 createdTabIds 里除了这个详情页外的其它（可能是重复打开的错误 tab）也加入待关列表
-          for (var ii = 0; ii < createdTabIds.length; ii++) {
-            var extraId = createdTabIds[ii];
-            if (extraId !== newDetailTabId && extraId !== listTabId && toRemove.indexOf(extraId) === -1) {
-              toRemove.push(extraId);
-              console.log('[bg] 🖱️   附带清理多余候选 tabId=' + extraId);
-            }
-          }
-          sendExtractMessage(candidate.id);
-          if (checkTimer) { try { clearInterval(checkTimer); } catch (e) {} checkTimer = null; }
-        } else if (waited >= MAX_WAIT) {
-          cleanupAndSend({ success: false, error: '找不到新详情页tab' });
-        }
-      });
-    }
-
-    function tryClickRow() {
-      if (finished) return;
-      if (stopFlags[type]) { cleanupAndSend({ success: false, error: '用户已停止' }); return; }
-      waited += 500;
-
-      chrome.tabs.get(listTabId, function (t) {
-        if (finished) return;
-        if (chrome.runtime.lastError || !t) {
-          cleanupAndSend({ success: false, error: '列表页标签已丢失' });
-          return;
-        }
-
-        if (!scriptInjected) {
-          ensureContentScript(listTabId, locator.listUrl, function (ok) {
-            scriptInjected = true;
-            if (!ok) {
-              if (waited < MAX_WAIT / 2) {
-                setTimeout(tryClickRow, 800);
-              } else {
-                cleanupAndSend({ success: false, error: '注入content失败' });
-              }
-              return;
-            }
-            setTimeout(tryClickRow, 400);
-          });
-          return;
-        }
-
-        if (!clickFinished) {
-          if (t.status !== 'complete' && waited < 4000) {
-            setTimeout(tryClickRow, 500);
-            return;
-          }
-          console.log('[bg] 🖱️   发送 findClickRow 消息给列表 tabId=' + listTabId + ', waited=' + waited);
-          chrome.tabs.sendMessage(listTabId, { action: 'findClickRow', locator: locator }, function (resp) {
-            if (finished) return;
-            if (chrome.runtime.lastError) {
-              console.warn('[bg] 🖱️   findClickRow sendMessage 失败: ' + chrome.runtime.lastError.message);
-              if (waited < MAX_WAIT / 2) setTimeout(tryClickRow, 600);
-              else cleanupAndSend({ success: false, error: '查找行失败' });
-              return;
-            }
-            if (resp && resp.success) {
-              clickFinished = true;
-              clickFinishedAt = Date.now(); // 🔴 记录点击时间，做时间窗口过滤
-              waited += 500;
-              console.log('[bg] 🖱️   点击成功，等待详情页新标签创建... clickFinishedAt=' + clickFinishedAt);
-              if (!checkTimer) checkTimer = setInterval(checkCandidateDetailTabs, 700);
-              setTimeout(checkCandidateDetailTabs, 1500);
-            } else if (waited < MAX_WAIT / 2) {
-              console.warn('[bg] 🖱️   未找到行，重试... err=' + (resp && resp.error ? resp.error : ''));
-              setTimeout(tryClickRow, 700);
-            } else {
-              cleanupAndSend({ success: false, error: resp && resp.error ? resp.error : '找不到匹配行' });
-            }
-          });
-        }
-      });
-    }
-
-    // 🚀 启动：先绑定 onCreated（防止漏掉），再创建临时列表页
-    chrome.tabs.onCreated.addListener(handleTabCreated);
-    setTimeout(function () {
-      try { chrome.tabs.onCreated.removeListener(handleTabCreated); } catch (e) {}
-      if (!finished) cleanupAndSend({ success: false, error: '总超时' });
-    }, MAX_WAIT + 5000);
-
-    chrome.tabs.create({ url: locator.listUrl, active: false }, function (tab) {
-      if (chrome.runtime.lastError || !tab || !tab.id) {
-        var err = chrome.runtime.lastError ? chrome.runtime.lastError.message : '创建标签失败';
-        console.error('[bg] 🖱️ 创建列表标签失败:', err);
-        try { chrome.tabs.onCreated.removeListener(handleTabCreated); } catch (e) {}
-        qCallback({ success: false, error: err });
-        return;
-      }
-      listTabId = tab.id;
-      detailTabs.set(listTabId, { type: type, created: Date.now() });
-      console.log('[bg] 🖱️ 已创建临时列表标签 tabId=' + listTabId);
-      setTimeout(tryClickRow, 1500);
-    });
-}
-
-// （doFindClickAndExtractDetail 结束）
 
 console.log('✅ background.js 已加载');
